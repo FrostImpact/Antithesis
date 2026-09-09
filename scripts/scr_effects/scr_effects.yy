@@ -1,0 +1,13 @@
+{
+  "$GMScript": "v1",
+  "%Name": "scr_effects",
+  "isCompatibility": false,
+  "isDnD": false,
+  "name": "scr_effects",
+  "parent": {
+    "name": "Rendering",
+    "path": "folders/Scripts/Rendering.yy"
+  },
+  "resourceType": "GMScript",
+  "resourceVersion": "2.0"
+}
