@@ -1,4 +1,5 @@
 // A short settling bounce gives placement weight without moving the footprint.
+tower_draw_move_fx(id);
 draw_set_alpha(relocating ? 0.25 : 1);
 definition.draw_model(x,tower_visual_y(id),facing,idle_time,recoil,aim_blend,charge_pose,recovery_left/0.5,obj_camera.zoom);
 draw_set_alpha(1);

@@ -5,32 +5,12 @@ if (background_layer!=-1) layer_set_visible(background_layer,false);
 depth=50;
 draw_set_circle_precision(48);
 elapsed=0;
-route = [[0,3],[1,3],[2,3],[3,3],[3,4],[3,5],[4,5],[5,5],[6,5],[6,4],[6,3],[6,2],[7,2],[8,2]];
-
-// The realm has resolved into broad, connected strata. The hard angles are
-// natural laws becoming visible, not masonry or manufactured panels.
-land_shelves=[
-    [-1.0,-0.8,9.0,6.8,44],
-    [-1.72,1.15,0.3,5.25,58],
-    [2.35,-1.48,6.35,0.35,67],
-    [7.75,0.95,9.72,4.75,54],
-    [2.05,5.65,6.85,7.55,72]
-];
-// A genuine absence in the terrain. Placement validation uses the same data.
-void_regions=[[4.05,0.55,5.35,2.3]];
-
-// Coherent cliff families frame the play space. Each root is one uninterrupted
-// mass; the cluster silhouette matters more than surface detail.
-var formations=[[-1.42,-0.18,0.86,148,0.2],[-0.72,-0.52,0.66,112,1.1],
-    [-1.72,0.78,0.76,126,2.0],[-1.38,1.62,0.6,82,2.7],
-    [5.62,-1.36,0.8,154,0.7],[6.42,-1.22,0.72,132,1.6],
-    [7.18,-1.02,0.62,104,2.5],[8.05,-0.72,0.52,82,3.4],
-    [9.18,0.15,0.66,108,4.1],[9.48,1.08,0.52,76,5.0]];
-for(var i=0;i<array_length(formations);++i) {
-    var p=formations[i];
-    instance_create_depth(project_x(p[0],p[1]),project_y(p[0],p[1]),-project_y(p[0],p[1]),obj_terrain,
-        {world_x:p[0],world_y:p[1],radius:p[2],elevation:p[3],shape_phase:p[4],terrain_style:"null_pillar"});
-}
+// These arrays come from marker instances placed directly in Room1. Route node
+// image indices define travel order; surface/void scales define their extents.
+route=map_collect_route();
+land_shelves=map_collect_regions(obj_map_surface,MapRegionKind.Surface);
+void_regions=map_collect_regions(obj_map_void,MapRegionKind.Void);
+map_spawn_terrain();
 
 // Each point is physical world x/y/z. Connections race between them, hold as a
 // constellation, then dissolve before a different region wakes up.

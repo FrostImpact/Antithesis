@@ -6,7 +6,12 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const translate = text => text.replace(/\bmod\b/g, '%');
-const definitions = new Function('draw_defender', 'defender_muzzle', `${translate(read('scripts/scr_definitions/scr_definitions.gml'))}; return build_tower_catalog();`)(() => {}, () => {});
+const GlossaryTerm={None:-1,GreatPowers:0,Charge:1,Lock:2,Count:3};
+const TowerAbility={DoubleTap:0,ShockBolts:1,Overloaded:2,Count:3};
+const TowerTargetMode={First:0,Strongest:1,Nearest:2,Count:3};
+const TowerChargeState={Ready:0,Charging:1,Burst:2,Recovery:3};
+const UiAction={None:-1,Target:0,Charge:1,Move:2,AbilityDoubleTap:3,AbilityShockBolts:4,AbilityOverloaded:5,AbilityMove:6,Spawn:7,Count:8};
+const definitions = new Function('draw_defender', 'defender_muzzle', 'draw_wanderer', 'wanderer_muzzle', 'GlossaryTerm', 'TowerAbility', `${translate(read('scripts/scr_definitions/scr_definitions.gml'))}; return build_tower_catalog();`)(() => {}, () => {}, () => {}, () => {}, GlossaryTerm, TowerAbility);
 const code = translate(read('scripts/scr_combat/scr_combat.gml'));
 const shared = { paused: false };
 function makeTower(enemies, definition = definitions.vestral) {
@@ -14,7 +19,8 @@ function makeTower(enemies, definition = definitions.vestral) {
     tower_type: 'vestral', world_x: 0, world_y: 0, x: 0, y: 0,
     obj_game: shared, obj_enemy: 'enemy', obj_impact: 'impact',
     noone: null, delta_time: 1e6 / 120,
-    min: Math.min, max: Math.max, abs: Math.abs, exp: Math.exp, sin: Math.sin, pi: Math.PI,
+    ceil:Math.ceil,min: Math.min, max: Math.max, abs: Math.abs, exp: Math.exp, sin: Math.sin, pi: Math.PI,
+    power:Math.pow,array_create:(count,value)=>Array(count).fill(value),array_length:value=>value.length,
     clamp: (v, a, b) => Math.max(a, Math.min(b, v)),
     lerp: (a, b, t) => a + (b - a) * t,
     point_distance: (a, b, c, d) => Math.hypot(c - a, d - b),
@@ -25,28 +31,35 @@ function makeTower(enemies, definition = definitions.vestral) {
     instance_find: (_, i) => enemies.filter(e => !e.destroyed)[i],
     instance_destroy: value => { value.destroyed = true; },
     instance_create_depth: () => {},
+    project_x:(x,y)=>x,project_y:(x,y)=>y,
+    TowerChargeState,TowerTargetMode,
   };
   // GML implicitly creates instance fields. Predeclare those fields in this host.
   const init = code.slice(code.indexOf('function tower_initialize'), code.indexOf('function tower_tick'));
   for (const match of init.matchAll(/^([a-z_]+)=/gm)) s[match[1]] = undefined;
   for (const key of ['kills', 'damage_dealt', 'shots_fired', 'hover_amount', 'selection_amount', 'select_pulse', 'reject_pulse', 'beam_world_y']) s[key] = 0;
   s.id = s;
-  const api = new Function('s', `with(s) { ${code}; return {init:tower_initialize,tick:tower_tick,charge:tower_request_charge,target:tower_find_target,progress:tower_charge_progress,fire:tower_fire,shock:enemy_apply_shock,movement:enemy_movement_time}; }`)(s);
+  const api = new Function('s', `with(s) { ${code}; return {init:tower_initialize,tick:tower_tick,charge:tower_request_charge,target:tower_find_target,progress:tower_charge_progress,begin:tower_begin_attack,tickAttack:tower_tick_attack_sequence,fireHit:tower_fire_hit,shock:enemy_apply_shock,movement:enemy_movement_time}; }`)(s);
   api.init(); s.settle = 0; s.facing = 0; s.aim_blend = 1;
   return { s, api };
 }
-const enemy = (health = 1000, worldX = 1, progress = 1) => ({ hit_points: health, world_x: worldX, world_y: 0, x: 20, y: 0, progress, shock_stacks:0, shock_left:0, shock_slow:0, lock_left:0 });
+const enemy = (health = 1000, worldX = 1, progress = 1) => ({ hit_points: health,max_hit_points:health, world_x: worldX, world_y: 0, x: 20, y: 0, progress, shock_stacks:0, shock_left:0, shock_slow:0, lock_left:0 });
 const run = (tower, frames) => { for (let i = 0; i < frames; i++) tower.api.tick(); };
+const fireBasic = (tower,target) => {
+  tower.api.begin(tower.s,false);
+  tower.api.tickAttack(tower.s,0,target,tower.s.instance_exists(target));
+  if(tower.s.attack_shots_left>0) tower.api.tickAttack(tower.s,tower.s.shot_interval,target,tower.s.instance_exists(target));
+};
 
 const first = enemy(1000, 2, 8), strong = enemy(2000, 1.5, 2), near = enemy(500, 0.5, 1), outside = enemy(9999, 9, 99);
 const t = makeTower([first, strong, near, outside]);
 assert.equal(t.api.target(t.s), first);
-t.s.target_mode = 1; assert.equal(t.api.target(t.s), strong);
-t.s.target_mode = 2; assert.equal(t.api.target(t.s), near);
+t.s.target_mode = TowerTargetMode.Strongest; assert.equal(t.api.target(t.s), strong);
+t.s.target_mode = TowerTargetMode.Nearest; assert.equal(t.api.target(t.s), near);
 
 const a = makeTower([enemy()]), b = makeTower([enemy()]);
 assert.equal(a.api.charge(a.s), true);
-assert.equal(b.s.charge_mode, 'ready', 'Another tower must keep independent state');
+assert.equal(b.s.charge_mode, TowerChargeState.Ready, 'Another tower must keep independent state');
 run(a, 384);
 assert.equal(a.s.shots_fired, 0, 'Charging must suppress attacks');
 assert.equal(a.s.stored_shots, 4);
@@ -65,10 +78,15 @@ assert.equal(dying.s.shots_fired, 1);
 assert.equal(dying.s.stored_shots, 3, 'Overloaded retains attacks when target dies');
 assert.equal(dying.s.kills, 1);
 
-const empty = makeTower([]);
+const emptyLane=[];
+const empty = makeTower(emptyLane);
 empty.api.charge(empty.s); run(empty, 500);
 assert.equal(empty.s.shots_fired, 0);
-assert.equal(empty.s.stored_shots, 0);
+assert.equal(empty.s.stored_shots, 4,'Overloaded banks attacks even when no enemy is in range');
+assert.equal(empty.s.charge_mode,TowerChargeState.Burst,'An empty lane keeps the stored burst ready for a future target');
+emptyLane.push(enemy(1000));run(empty,180);
+assert.equal(empty.s.shots_fired,4,'Every targetless banked attack releases after a target arrives');
+assert.equal(empty.s.hits_landed,8,'Stored Double Taps retain both delayed bolts');
 const paused = makeTower([enemy()]); paused.api.charge(paused.s); run(paused, 50);
 const before = paused.s.charge_left; shared.paused = true; run(paused, 100);
 assert.equal(paused.s.charge_left, before); shared.paused = false;
@@ -85,10 +103,20 @@ const firstTurnVelocity=smooth.s.turn_velocity; smooth.api.tick();
 assert.ok(smooth.s.turn_velocity>firstTurnVelocity,'Turn spring accelerates smoothly toward its target');
 run(smooth,240);
 assert.ok(Math.abs(smooth.s.angle_difference(90,smooth.s.facing))<1,'Turn spring settles on its target');
-console.log('PASS: targeting modes/range, independent tower state, charge suppression, Double Tap burst, queue retention, empty charge, pause, reuse delay, definition-driven stats.');
+const cadenceTarget=enemy(10000);const cadence=makeTower([cadenceTarget]);
+cadence.api.tick();
+assert.equal(cadence.s.hits_landed,1,'A basic attack starts with one bolt');
+assert.ok(cadence.s.shot_fx_duration<cadence.s.shot_interval,'The first tracer clears before the second bolt');
+run(cadence,10);assert.equal(cadence.s.hits_landed,1,'The second bolt is separated by a short delay');
+run(cadence,1);assert.equal(cadence.s.hits_landed,2,'The second bolt completes the Double Tap');
+assert.ok(cadence.s.cooldown>0.79,'The full ATK SPD cooldown starts after the second bolt');
+run(cadence,94);assert.equal(cadence.s.hits_landed,2,'No new basic attack starts during the post-pair cooldown');
+run(cadence,3);assert.equal(cadence.s.hits_landed,3,'The next basic attack starts only after the full cooldown');
+console.log('PASS: targeting, independent state, two-bolt cadence, post-pair cooldown, charge suppression, targetless Overloaded banking, queue retention, pause, reuse delay, and definition-driven stats.');
 
-const actor = { x: 500, y: 300, facing: 300, charge_mode: 'ready' };
+const actor = { x: 500, y: 300, facing: 300, charge_mode: TowerChargeState.Ready };
 const input = {
+  ord: s=>s.charCodeAt(0),
   obj_tower: 'tower', obj_placement: 'placement', noone: null,
   obj_camera: { map_angle: 45, target_zoom: 1 }, obj_game: { selected_tower: null, paused: false, config: { drag_threshold: 6, zoom_step: 0.1, zoom_min: 0.72, zoom_max: 1.28, restart_key: 82, pause_key: 80, charge_key: 67 } },
   mouse_x: 500, mouse_y: 280, mb_left: 1, mb_right: 2, vk_escape: 27,
@@ -187,17 +215,17 @@ console.log('PASS: chain-based Lock feedback, clean enemy health bars, and remov
 // Vestral: independent hit accounting, unlimited attacks and status timing.
 const victim=enemy(10000), v=makeTower([victim]);
 assert.equal(/\bammo\b/i.test(read('scripts/scr_combat/scr_combat.gml')+read('scripts/scr_definitions/scr_definitions.gml')+read('objects/obj_tower/Draw_73.gml')),false,'Vestral has no ammo system or counter');
-v.api.fire(v.s,victim);
+fireBasic(v,victim);
 assert.equal(victim.hit_points,9980);
 assert.equal(v.s.hits_landed,2);
 assert.equal(victim.shock_stacks,2);
 assert.equal(victim.shock_slow,0.1);
-for(let i=0;i<3;i++) v.api.fire(v.s,victim);
+for(let i=0;i<3;i++) fireBasic(v,victim);
 assert.equal(victim.shock_stacks,8);
 assert.equal(victim.shock_slow,0.4);
 assert.equal(victim.lock_left,0.8);
 assert.equal(v.api.movement(victim,0.2),0,'Lock prevents movement');
-v.api.fire(v.s,victim);
+fireBasic(v,victim);
 assert.ok(Math.abs(victim.lock_left-0.6)<1e-9,'Refreshing capped slow must not refresh Lock');
 assert.ok(Math.abs(v.api.movement(victim,0.7)-0.1)<1e-9,'Movement resumes when Lock ends mid-frame');
 assert.equal(victim.shock_stacks,0);
@@ -205,11 +233,11 @@ assert.equal(victim.shock_slow,0);
 for(let i=0;i<8;i++) v.api.shock(victim,definitions.vestral);
 assert.equal(victim.lock_left,0.8,'A new set of stacks can Lock again');
 const sustained=makeTower([enemy(10000)]);
-for(let i=0;i<40;i++) sustained.api.fire(sustained.s,sustained.api.target(sustained.s));
+for(let i=0;i<40;i++) fireBasic(sustained,sustained.api.target(sustained.s));
 assert.equal(sustained.s.shots_fired,40,'Vestral never runs out of ammo');
 assert.equal(sustained.s.hits_landed,80);
 const fragile=makeTower([enemy(5)]);
-fragile.api.fire(fragile.s,fragile.api.target(fragile.s));
+fireBasic(fragile,fragile.api.target(fragile.s));
 assert.equal(fragile.s.hits_landed,1,'No second damage event against a dead enemy');
 assert.equal(fragile.s.damage_dealt,5);
 assert.equal(fragile.s.kills,1);
@@ -220,18 +248,22 @@ assert.equal(targets[1].hit_points,940,'Burst retargets after a kill');
 const leavingEnemy=enemy(); const waiting=makeTower([leavingEnemy]);
 waiting.api.charge(waiting.s); run(waiting,384); leavingEnemy.world_x=99;
 run(waiting,120); assert.equal(waiting.s.stored_shots,4);
-leavingEnemy.world_x=1; run(waiting,120); assert.equal(waiting.s.shots_fired,4);
+leavingEnemy.world_x=1; run(waiting,150); assert.equal(waiting.s.shots_fired,4);
 console.log('PASS: Double Tap damage, unlimited attacks, lethal hits, shock cap/refresh/expiry, longer Lock, retargeting and waiting.');
 
-const panel={panel_left:24,panel_top:438,panel_width:1044,panel_height:290,panel_open:1,spawn_left:30,spawn_top:60,spawn_width:214,spawn_height:42};
-const uiHost={clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),noone:null,obj_ui:panel,obj_game:{selected_tower:v.s},mb_left:1,mx:0,my:0,
+const panel={panel_left:24,panel_top:438,panel_open:1,spawn_left:30,spawn_top:60,spawn_width:214,spawn_height:42,term_regions:[]};
+const richDraws=[];
+const uiHost={clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),noone:null,obj_ui:panel,obj_game:{selected_tower:v.s,ui_theme:{underline:0}},mb_left:1,mx:0,my:0,
   instance_exists:e=>e!=null,mouse_check_button_pressed:()=>true,
- point_in_rectangle:(x,y,l,t,r,b)=>x>=l&&x<=r&&y>=t&&y<=b,string_width:s=>s.length*6};
+ point_in_rectangle:(x,y,l,t,r,b)=>x>=l&&x<=r&&y>=t&&y<=b,string_width:s=>s.length*6,
+ string_height:()=>12,string_length:s=>s.length,string_char_at:(s,i)=>s[i-1],
+ draw_set_colour:()=>{},draw_line:()=>{},draw_text:(x,y,text)=>richDraws.push({x,y,text}),array_push:(a,v)=>a.push(v),
+ UiAction,GlossaryTerm,TowerTargetMode,array_length:a=>a.length,is_undefined:v=>v===undefined};
 uiHost.device_mouse_x_to_gui=()=>uiHost.mx;
 uiHost.device_mouse_y_to_gui=()=>uiHost.my;
 uiHost.game_select_tower=t=>uiHost.obj_game.selected_tower=t;
 uiHost.tower_cancel_move=()=>false;
-const uiApi=new Function('s',`with(s){${feedbackSource};return {click:ui_handle_input,blocked:ui_pointer_blocked,term:ui_term_at_pointer};}`)(uiHost);
+const uiApi=new Function('s',`with(s){${feedbackSource};return {click:ui_handle_input,blocked:ui_pointer_blocked,term:ui_term_at_pointer,rich:ui_draw_rich_text};}`)(uiHost);
 assert.equal(v.s.ability_detail_open,false,'Ability descriptions start closed');
 const tabPositions=[[485,17],[485,61],[485,105]];
 for(let i=0;i<3;i++) {
@@ -242,28 +274,46 @@ for(let i=0;i<3;i++) {
 }
 uiHost.mx=panel.panel_left+50;uiHost.my=panel.panel_top+230;
 uiApi.click();assert.equal(v.s.target_mode,1);
-uiHost.mx=panel.panel_left+120;uiHost.my=panel.panel_top+50;
+panel.term_regions=[{term:GlossaryTerm.GreatPowers,left:100,top:470,right:180,bottom:490},
+ {term:GlossaryTerm.Lock,left:650,top:540,right:690,bottom:560},
+ {term:GlossaryTerm.Charge,left:720,top:510,right:770,bottom:530}];
+uiHost.mx=120;uiHost.my=480;
 assert.equal(uiApi.term(),0,'Great powers exposes a glossary card');
-v.s.ability_tab=1;uiHost.mx=panel.panel_left+620+"Upon reaching maximum stacks, the enemy is inflicted with ".length*6+2;uiHost.my=panel.panel_top+120;
+v.s.ability_tab=1;uiHost.mx=660;uiHost.my=550;
 assert.equal(uiApi.term(),2,'Lock exposes a glossary card');
-v.s.ability_tab=2;uiHost.mx=panel.panel_left+620+"For every attack that would have been performed during ".length*6+2;uiHost.my=panel.panel_top+60;
+v.s.ability_tab=2;uiHost.mx=730;uiHost.my=520;
 assert.equal(uiApi.term(),1,'Charge exposes a glossary card');
 uiHost.mx=panel.panel_left+1000;uiHost.my=panel.panel_top+280;
+assert.equal(uiApi.blocked(),false,'Empty space between UI modules must remain clickable world space');
 uiApi.click();assert.equal(uiHost.obj_game.selected_tower,v.s,'Tower dossier has no close button');
 const towerUiCopy=read('objects/obj_ui/Draw_64.gml');
-assert.ok(towerUiCopy.includes('Basic Attacks fire twice, each dealing 50% ATK.'));
-assert.ok(towerUiCopy.includes('Basic Attacks slow enemies for 5%, lasting for 0.4s.'));
-assert.ok(towerUiCopy.includes('instead, release it at the end of charge with a low delay between shots.'));
-assert.equal(towerUiCopy.includes('*great powers*')||towerUiCopy.includes('*Charge*')||towerUiCopy.includes('Lock*'),false,'Visible glossary terms have no asterisks');
+const towerDefinitionCopy=read('scripts/scr_definitions/scr_definitions.gml');
+assert.ok(towerDefinitionCopy.includes('Basic Attacks fire twice, each dealing 50% of ATK.'));
+assert.ok(towerDefinitionCopy.includes('Basic Attacks slow enemies for 5%, lasting for 0.4s.'));
+assert.ok(towerDefinitionCopy.includes('instead, release it at the end of charge with a low delay between shots.'));
+assert.ok(towerUiCopy.includes('ui_draw_rich_text')&&feedbackSource.includes('ui_register_term'),'Skill copy uses shared wrapping and generated glossary regions');
+for(const ability of [definitions.vestral.abilities[TowerAbility.ShockBolts],definitions.vestral.abilities[TowerAbility.Overloaded]]) {
+ richDraws.length=0;panel.term_regions=[];uiApi.rich(0,0,100,ability.paragraphs,18,0);
+ assert.ok(richDraws.every(token=>token.x+token.text.length*6<=100),`${ability.title} text must remain inside its box`);
+}
+assert.equal(towerDefinitionCopy.includes('*great powers*')||towerDefinitionCopy.includes('*Charge*')||towerDefinitionCopy.includes('Lock*'),false,'Visible glossary terms have no asterisks');
 uiHost.mx=panel.panel_left+tabPositions[2][0];uiHost.my=panel.panel_top+tabPositions[2][1];uiApi.click();
 assert.equal(v.s.ability_detail_open,false,'Clicking the open vertical ability closes its description');
-console.log('PASS: fitted modular dossier, vertical ability stack, closed-by-default descriptions, underlined hover glossary, exact skill copy, and no close button.');
+console.log('PASS: modular hit regions, click-through empty space, wrapped catalog copy, vertical ability tabs, and generated glossary regions.');
 
 const worldDraw=read('objects/obj_world/Draw_0.gml');
 assert.equal(worldDraw.includes('shard'),false,'Triangular platform-end shards are removed');
 const worldCreate=read('objects/obj_world/Create_0.gml');
-assert.ok(worldCreate.includes('terrain_style:"null_pillar"'),'Map has bold, uninterrupted null mountain masses');
+const mapSource=read('scripts/scr_map/scr_map.gml');
+const roomSource=read('rooms/Room1/Room1.yy');
+const roomData=JSON.parse(roomSource.replace(/,\s*([}\]])/g,'$1'));
+const mapInstances=roomData.layers.find(layer=>layer.name==='Instances').instances;
+const routeMarkers=mapInstances.filter(instance=>instance.objectId.name==='obj_map_route').sort((a,b)=>a.imageIndex-b.imageIndex);
+assert.equal(routeMarkers.length,14);
+assert.deepEqual(routeMarkers.map(marker=>marker.imageIndex),Array.from({length:14},(_,i)=>i),'Room route markers keep a complete travel order');
+assert.ok(mapSource.includes('terrain_style:"null_pillar"'),'Map has bold, uninterrupted null mountain masses');
 assert.ok(worldCreate.includes('land_shelves=')&&worldCreate.includes('void_regions=')&&worldCreate.includes('sky_constellations=')&&worldCreate.includes('sky_constellation_links='),'Shelves, absence and aerial constellations share authored realm data');
+assert.ok(worldCreate.includes('map_collect_route()')&&roomSource.includes('obj_map_route')&&roomSource.includes('obj_map_surface')&&roomSource.includes('obj_map_void')&&roomSource.includes('obj_map_terrain'),'Gameplay map geometry is authored with Room Editor markers');
 assert.equal(worldCreate.includes('surface_faults='),false,'Ground crack data is removed');
 assert.equal(worldDraw.includes('surface_faults'),false,'Ground cracks are not rendered');
 assert.equal(/pylon|registry|terminal|sky_nodes/i.test(worldDraw+worldCreate),false,'Environment contains no engineered pylons, terminals or sky frame');
@@ -280,9 +330,9 @@ console.log('PASS: clean ground plane, connected isometric strata, solid mountai
 const roomStartup=read('rooms/Room1/RoomCreationCode.gml');
 const uiDepth=Number(roomStartup.match(/instance_create_depth\(0,0,(-?\d+),obj_ui\)/)[1]);
 assert.ok(uiDepth>-16000 && uiDepth<16000,'UI must be created inside the drawable depth range');
-const uiEvents=JSON.parse(read('objects/obj_ui/obj_ui.yy'));
-assert.ok(uiEvents.visible && uiEvents.eventList.some(e=>e.eventType===8 && e.eventNum===64),'Visible UI must bind Draw GUI');
-const enemyCatalog=new Function(`${translate(read('scripts/scr_definitions/scr_definitions.gml'))}; return build_enemy_catalog();`)();
+const uiEvents=read('objects/obj_ui/obj_ui.yy');
+assert.ok(uiEvents.includes('"visible":true') && /"eventNum":64,"eventType":8/.test(uiEvents),'Visible UI must bind Draw GUI');
+const enemyCatalog=new Function('GlossaryTerm','TowerAbility',`${translate(read('scripts/scr_definitions/scr_definitions.gml'))}; return build_enemy_catalog();`)(GlossaryTerm,TowerAbility);
 assert.equal(enemyCatalog.heavy.max_hit_points,enemyCatalog.intrusion.max_hit_points*3);
 assert.equal(enemyCatalog.heavy.move_speed,enemyCatalog.intrusion.move_speed*0.5);
 const spawned=[];
@@ -314,8 +364,10 @@ const neighbour={world_x:5,world_y:5};
 const moveState={obj_game:shared,obj_world:{route:[[1,1],[2,1]],void_regions:[[6,0,7,1]]},obj_terrain:'terrain',obj_tower:'tower',obj_placement:null,
  noone:null,max:Math.max,abs:Math.abs,array_length:a=>a.length,
  point_distance:(x,y,a,b)=>Math.hypot(x-a,y-b),project_x:x=>x*10,project_y:(x,y)=>y*10,
+ TowerChargeState,TowerTargetMode,clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),lerp:(a,b,t)=>a+(b-a)*t,power:Math.pow,
  instance_exists:v=>v!=null&&!v.destroyed,instance_number:o=>o==='terrain'?terrain.length:2,
  instance_find:(o,i)=>o==='terrain'?terrain[i]:[mover.s,neighbour][i]};
+moveState.map_point_on_surface=(x,y)=>x>=-0.15&&x<=8.15&&y>=-0.15&&y<=6.15&&!(x>=5.66&&x<=7.34&&y>=-0.34&&y<=1.34);
 moveState.variable_instance_exists=(owner,key)=>owner!=null&&key in owner;
 moveState.instance_create_depth=(x,y,d,o,settings)=>{moveState.obj_placement={...settings};};
 moveState.instance_destroy=o=>{o.destroyed=true;moveState.obj_placement=null;};
@@ -339,13 +391,135 @@ assert.equal(mover.s.world_x,0);
 assert.equal(moveApi.start(mover.s),true);
 shared.paused=true;assert.equal(moveApi.commit(mover.s,3,3),false);shared.paused=false;
 assert.equal(moveApi.commit(mover.s,3,3),true);
+assert.equal(mover.s.move_active,true,'A valid move starts the phase dash instead of teleporting');
+assert.equal(mover.s.world_x,0,'The dash begins at the original footprint');
+run(mover,39);
 assert.deepEqual([mover.s.world_x,mover.s.world_y,mover.s.kills,mover.s.damage_dealt,mover.s.cooldown],[3,3,2,160,0.4]);
 assert.equal(mover.s.relocating,false);
-moveState.obj_placement=null;mover.s.charge_mode='charging';assert.equal(moveApi.start(mover.s),false);
+assert.equal(mover.s.move_active,false);
+moveState.obj_placement=null;mover.s.charge_mode=TowerChargeState.Charging;assert.equal(moveApi.start(mover.s),false);
 uiHost.obj_game.selected_tower=mover.s;
 let chargeClicks=0,moveClicks=0;
 uiHost.tower_request_charge=t=>{assert.equal(t,mover.s);chargeClicks++;};
 uiHost.tower_request_move=t=>{assert.equal(t,mover.s);moveClicks++;};
 uiHost.mx=panel.panel_left+280;uiHost.my=panel.panel_top+230;uiApi.click();assert.equal(chargeClicks,1);
 uiHost.mx=panel.panel_left+100;uiHost.my=panel.panel_top+269;uiApi.click();assert.equal(moveClicks,1);
-console.log('PASS: relocation footprint checks, duplicate/charge/pause guards, cancel, preserved combat state and Charge/Move buttons.');
+console.log('PASS: room-surface footprint checks, duplicate/charge/pause guards, cancel, animated dash, preserved combat state and controls.');
+
+// WANDERER uses the same production controller, with no autonomous attacks.
+const hunterVictim=enemy(1000,20,5);
+const hunter=makeTower([hunterVictim],definitions.wanderer);
+run(hunter,600);
+assert.equal(hunter.s.shots_fired,0);
+assert.equal(hunter.api.target(hunter.s),null);
+assert.equal(hunter.api.charge(hunter.s),true);
+run(hunter,181);
+assert.equal(hunterVictim.hit_points,940,'Execution hits outside normal range');
+assert.equal(hunter.s.shots_fired,1);
+assert.ok(hunter.s.charge_lockout>0);
+assert.equal(hunterVictim.shock_stacks,0,'Hunter attacks never apply Shock Bolts');
+assert.equal(hunter.s.vigil,0,'Zero-stack skills must remain usable');
+
+const executeVictim=enemy(100,20);executeVictim.hit_points=63;
+const execution=makeTower([executeVictim],definitions.wanderer);
+execution.s.vigil=2;
+execution.api.charge(execution.s);run(execution,181);
+assert.equal(executeVictim.destroyed,true,'A hit leaving less than 3.5% executes');
+assert.equal(execution.s.damage_dealt,63,'Execution damage counts actual remaining health');
+assert.equal(execution.s.vigil,4,'Spend one, then earn three stacks for 63 damage');
+assert.equal(execution.s.damage,66);
+assert.equal(execution.s.charge_lockout,0,'The killing Execution immediately resets its cooldown');
+assert.equal(execution.api.charge(execution.s),true);
+
+const below=enemy(10000);below.hit_points=349;
+const preExecute=makeTower([below],definitions.wanderer);
+preExecute.api.fireHit(preExecute.s,below);
+assert.equal(below.destroyed,true,'Already below threshold executes even above ATK');
+assert.equal(preExecute.s.vigil_earned,4,'A kill grants at most four stacks');
+const boundary=enemy(10000);boundary.hit_points=350;
+const exact=makeTower([boundary],definitions.wanderer);exact.s.damage=0;
+exact.api.fireHit(exact.s,boundary);
+assert.equal(boundary.hit_points,350,'Exactly 3.5% does not execute');
+
+const crossing=makeTower([enemy(100)],definitions.wanderer);
+crossing.s.vigil_earned=11;crossing.s.damage=120;
+crossing.api.fireHit(crossing.s,crossing.s.instance_find('enemy',0));
+assert.equal(crossing.s.vigil_earned,15);
+assert.equal(crossing.s.damage,123.5,'Only the twelfth lifetime stack gets the full ATK bonus');
+
+const moveVictim=enemy(60,2);
+const sniper=makeTower([moveVictim],definitions.wanderer);
+Object.assign(sniper.s,{move_active:true,relocating:true,move_target_x:2,move_target_y:0,vigil:1,charge_lockout:5});
+run(sniper,39);
+assert.equal(sniper.s.move_active,false);
+assert.equal(sniper.s.shots_fired,1,'Arrival fires exactly once');
+assert.equal(moveVictim.destroyed,true);
+assert.equal(sniper.s.charge_lockout,0,'Move kills also reset Execution');
+assert.equal(sniper.s.damage,66);
+run(sniper,120);assert.equal(sniper.s.shots_fired,1);
+
+const emptyHunter=makeTower([],definitions.wanderer);
+emptyHunter.s.vigil=1;emptyHunter.api.charge(emptyHunter.s);
+shared.paused=true;run(emptyHunter,200);
+assert.equal(emptyHunter.s.charge_left,1.5);assert.equal(emptyHunter.s.vigil,1);
+shared.paused=false;run(emptyHunter,181);
+assert.equal(emptyHunter.s.shots_fired,0);
+assert.equal(emptyHunter.s.vigil,0);
+assert.equal(emptyHunter.s.charge_mode,TowerChargeState.Ready);
+assert.ok(emptyHunter.s.charge_lockout>0,'An empty lane finishes cleanly');
+const ordering=makeTower([enemy(100,12,9),enemy(300,8,2),enemy(50,5,1)],definitions.wanderer);
+assert.equal(ordering.api.target(ordering.s,true).progress,9);
+ordering.s.target_mode=TowerTargetMode.Strongest;assert.equal(ordering.api.target(ordering.s,true).hit_points,300);
+ordering.s.target_mode=TowerTargetMode.Nearest;assert.equal(ordering.api.target(ordering.s,true).world_x,5);
+shared.selected_tower=sniper.s;
+uiHost.obj_game.selected_tower=sniper.s;
+uiHost.mx=panel.panel_left+485;uiHost.my=panel.panel_top+149;
+uiApi.click();assert.equal(sniper.s.ability_tab,3);
+assert.equal(sniper.s.ability_detail_open,true);
+console.log('PASS: WANDERER passive, global targeting, execute boundaries, Vigil cap/breakpoint, permanent ATK, cooldown resets, move shot, empty lane, pause and fourth ability.');
+
+// Exercise the actual procedural mesh across its animated poses and facings.
+let meshVertices=[];
+const rigHost={clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),lerp:(a,b,t)=>a+(b-a)*t,
+  max:Math.max,sqrt:Math.sqrt,
+  sin:Math.sin,dsin:v=>Math.sin(v*Math.PI/180),dcos:v=>Math.cos(v*Math.PI/180),
+  make_colour_rgb:()=>0,merge_colour:()=>0,c_black:0,pr_trianglefan:0,
+  array_length:a=>a.length,array_push:(a,v)=>a.push(v),array_sort:(a,f)=>a.sort(f),sign:Math.sign,
+  draw_set_colour:()=>{},draw_primitive_begin:()=>{},draw_primitive_end:()=>{},
+  draw_vertex:(x,y)=>{assert.ok(Number.isFinite(x)&&Number.isFinite(y));meshVertices.push([x,y]);}};
+const rig=new Function('s',`with(s){${translate(read('scripts/scr_defender/scr_defender.gml'))};return {draw:draw_wanderer,muzzle:wanderer_muzzle};}`)(rigHost);
+for(const angle of [0,90,180,270,300]) for(const pose of [[0,0,0,0,0],[1,0,1,1,0],[2,11,1,0,0],[3,0,1,0,1]]) {
+  meshVertices=[];rig.draw(200,200,angle,...pose,1);
+  assert.ok(meshVertices.length>100);
+  const muzzle=rig.muzzle(200,200,angle,...pose,1);
+  assert.ok(muzzle.every(Number.isFinite));
+}
+console.log('PASS: WANDERER procedural model produces finite geometry and muzzle positions across idle, charge, recoil, recovery and five facings.');
+
+// Idle tracking must not stand the hunter up; only skills raise the weapon.
+const resting=makeTower([enemy()],definitions.wanderer);run(resting,180);
+assert.ok(resting.s.aim_blend<0.001);
+resting.api.charge(resting.s);run(resting,90);assert.ok(resting.s.aim_blend>0.98);
+shared.paused=true;const frozenPose=[resting.s.charge_left,resting.s.idle_time,resting.s.charge_pose];
+run(resting,60);assert.deepEqual([resting.s.charge_left,resting.s.idle_time,resting.s.charge_pose],frozenPose);
+shared.paused=false;
+let sharedImpacts=0;resting.s.instance_create_depth=()=>sharedImpacts++;
+run(resting,91);assert.equal(sharedImpacts,0,'WANDERER never emits Vestral impact particles');
+assert.ok(resting.s.finisher_flash>0.6,'Shot animation outlasts the brief damage beam');
+run(resting,220);assert.ok(resting.s.aim_blend<0.001,'Returns to kneeling after recoil');
+let effectCalls=0,fxAlpha=1,fxBlend=0;
+const recordFx=(...values)=>{assert.ok(values.every(v=>typeof v==='boolean'||Number.isFinite(v)));effectCalls++;};
+const fxHost={...rigHost,obj_camera:{zoom:1},TowerChargeState,pi:Math.PI,bm_add:1,bm_normal:0,c_white:0,
+    frac:v=>v-Math.floor(v),power:Math.pow,
+    project_x:x=>x,project_y:(x,y)=>y,tower_visual_y:t=>t.y,tower_move_progress:()=>0.5,
+    tower_charge_progress:t=>1-t.charge_left/t.charge_duration,
+    point_direction:(x,y,tx,ty)=>Math.atan2(y-ty,tx-x)*180/Math.PI,
+    draw_set_alpha:v=>{assert.ok(Number.isFinite(v));fxAlpha=v;},gpu_set_blendmode:v=>fxBlend=v,
+    draw_triangle:recordFx,draw_line_width:recordFx};
+const fxApi=new Function('s',`with(s){${translate(read('scripts/scr_effects/scr_effects.gml'))};return {charge:tower_draw_charge_fx,shot:tower_draw_attack_fx,move:tower_draw_move_fx};}`)(fxHost);
+const fxTower={...resting.s,definition:{...definitions.wanderer,muzzle:rig.muzzle},charge_mode:TowerChargeState.Charging};
+for(const p of [0,0.5,0.99]) {fxTower.charge_left=1.5*(1-p);effectCalls=0;fxApi.charge(fxTower);assert.ok(effectCalls>=110);}
+for(const age of [0,0.12,0.4,0.64]) {fxTower.finisher_flash=0.65-age;effectCalls=0;fxApi.shot(fxTower);assert.ok(effectCalls>=92);}
+fxTower.move_active=true;fxTower.move_from_x=0;fxTower.move_from_y=0;effectCalls=0;fxApi.move(fxTower);assert.equal(effectCalls,48);
+assert.equal(fxAlpha,1);assert.equal(fxBlend,0);
+console.log('PASS: kneeling with targets, skill rise/settle, paused poses, exclusive WANDERER particles, finite charge/shot/move effects and restored draw state.');

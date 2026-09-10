@@ -1,117 +1,194 @@
-// Drawing and input share the animated panel origin and control rectangles.
-function ui_panel_y() { return obj_ui.panel_top+(1-clamp(obj_ui.panel_open,0,1))*16; }
+// UI drawing and input share the same module bounds. Nothing outside a drawn
+// module consumes world clicks.
+function ui_panel_y() {
+    return obj_ui.panel_top+(1-clamp(obj_ui.panel_open,0,1))*16;
+}
+
 function ui_control_rect(_control) {
     switch(_control) {
-        case 0: return [14,212,190,246];
-        case 1: return [200,212,360,246];
-        case 2: return [14,256,360,290];
-        case 3: return [380,0,590,34];
-        case 4: return [380,44,590,78];
-        case 5: return [380,88,590,122];
+        case UiAction.Target: return [14,212,190,246];
+        case UiAction.Charge: return [200,212,360,246];
+        case UiAction.Move: return [14,256,360,290];
+        case UiAction.AbilityDoubleTap: return [380,0,590,34];
+        case UiAction.AbilityShockBolts: return [380,44,590,78];
+        case UiAction.AbilityOverloaded: return [380,88,590,122];
+        case UiAction.AbilityMove: return [380,132,590,166];
     }
     return [0,0,0,0];
 }
+
+function ui_point_in_local_rect(_mx,_my,_rect) {
+    return point_in_rectangle(_mx,_my,_rect[0],_rect[1],_rect[2],_rect[3]);
+}
+
 function ui_spawn_hovered() {
     if(!instance_exists(obj_ui)) return false;
     return point_in_rectangle(device_mouse_x_to_gui(0),device_mouse_y_to_gui(0),
         obj_ui.spawn_left,obj_ui.spawn_top,obj_ui.spawn_left+obj_ui.spawn_width,obj_ui.spawn_top+obj_ui.spawn_height);
 }
+
 function ui_pointer_blocked() {
     if(!instance_exists(obj_ui)) return false;
     if(ui_spawn_hovered()) return true;
+    var pointer_x=device_mouse_x_to_gui(0); var pointer_y=device_mouse_y_to_gui(0);
+    if(obj_ui.tooltip_blend>0.01 && ui_point_in_local_rect(pointer_x,pointer_y,obj_ui.tooltip_rect)) return true;
     if(!instance_exists(obj_game.selected_tower)) return false;
-    var mx=device_mouse_x_to_gui(0); var my=device_mouse_y_to_gui(0);
-    return point_in_rectangle(mx,my,obj_ui.panel_left,ui_panel_y(),
-        obj_ui.panel_left+obj_ui.panel_width,ui_panel_y()+obj_ui.panel_height);
-}
-function ui_action_at_pointer() {
-    if(ui_spawn_hovered()) return 7;
-    if(!instance_exists(obj_game.selected_tower)) return -1;
-    var mx=device_mouse_x_to_gui(0)-obj_ui.panel_left;
-    var my=device_mouse_y_to_gui(0)-ui_panel_y();
-    for(var control=0;control<6;++control) {
-        var bounds=ui_control_rect(control);
-        if(point_in_rectangle(mx,my,bounds[0],bounds[1],bounds[2],bounds[3])) return control;
+    var mx=pointer_x-obj_ui.panel_left;
+    var my=pointer_y-ui_panel_y();
+    if(point_in_rectangle(mx,my,0,0,360,198)) return true;
+    for(var action=UiAction.Target;action<=UiAction.AbilityDoubleTap+array_length(obj_game.selected_tower.definition.abilities)-1;++action) {
+        if(ui_point_in_local_rect(mx,my,ui_control_rect(action))) return true;
     }
-    return -1;
+    if(obj_game.selected_tower.ability_detail_open && point_in_rectangle(mx,my,604,0,1044,198)) return true;
+    return false;
 }
-// Starred terms have explicit hit regions so their glossary cards never depend
-// on approximate automatic wrapping.
-function ui_term_at_pointer() {
-    if(!instance_exists(obj_ui) || !instance_exists(obj_game.selected_tower)) return -1;
+
+function ui_action_at_pointer() {
+    if(ui_spawn_hovered()) return UiAction.Spawn;
+    if(!instance_exists(obj_game.selected_tower)) return UiAction.None;
     var mx=device_mouse_x_to_gui(0)-obj_ui.panel_left;
     var my=device_mouse_y_to_gui(0)-ui_panel_y();
-    var quote_term_x=14+string_width("“A survivor of ");
-    if(point_in_rectangle(mx,my,quote_term_x,40,quote_term_x+string_width("great powers"),65)) return 0;
-    var tab=obj_game.selected_tower.ability_tab;
-    if(!obj_game.selected_tower.ability_detail_open) return -1;
-    var lock_term_x=620+string_width("Upon reaching maximum stacks, the enemy is inflicted with ");
-    if(tab==1 && (point_in_rectangle(mx,my,lock_term_x,110,lock_term_x+string_width("Lock"),135) ||
-        point_in_rectangle(mx,my,620,138,620+string_width("Lock"),163))) return 2;
-    var charge_term_x=620+string_width("For every attack that would have been performed during ");
-    if(tab==2 && point_in_rectangle(mx,my,charge_term_x,50,charge_term_x+string_width("Charge"),75)) return 1;
-    return -1;
+    for(var action=UiAction.Target;action<=UiAction.AbilityDoubleTap+array_length(obj_game.selected_tower.definition.abilities)-1;++action) {
+        if(ui_point_in_local_rect(mx,my,ui_control_rect(action))) return action;
+    }
+    return UiAction.None;
 }
+
+function ui_register_term(_term,_left,_top,_right,_bottom) {
+    if(_term==GlossaryTerm.None || !instance_exists(obj_ui)) return;
+    array_push(obj_ui.term_regions,{term:_term,left:_left,top:_top,right:_right,bottom:_bottom});
+}
+
+function ui_term_at_pointer() {
+    if(!instance_exists(obj_ui) || !instance_exists(obj_game.selected_tower)) return GlossaryTerm.None;
+    var mx=device_mouse_x_to_gui(0); var my=device_mouse_y_to_gui(0);
+    for(var i=0;i<array_length(obj_ui.term_regions);++i) {
+        var region=obj_ui.term_regions[i];
+        if(point_in_rectangle(mx,my,region.left,region.top,region.right,region.bottom)) return region.term;
+    }
+    return GlossaryTerm.None;
+}
+
+function ui_term_anchor(_term) {
+    var mx=device_mouse_x_to_gui(0); var my=device_mouse_y_to_gui(0);
+    var fallback=undefined;
+    for(var i=0;i<array_length(obj_ui.term_regions);++i) {
+        var region=obj_ui.term_regions[i];
+        if(region.term!=_term) continue;
+        if(is_undefined(fallback)) fallback=region;
+        if(point_in_rectangle(mx,my,region.left,region.top,region.right,region.bottom)) return region;
+    }
+    return fallback;
+}
+
+// One wrapping algorithm serves every title card. Tagged glossary segments are
+// underlined and receive exact hover bounds automatically.
+function ui_draw_rich_text(_x,_y,_width,_paragraphs,_line_height,_colour) {
+    var theme=obj_game.ui_theme;
+    var cursor_y=_y;
+    for(var paragraph_index=0;paragraph_index<array_length(_paragraphs);++paragraph_index) {
+        if(paragraph_index>0) cursor_y+=5;
+        var cursor_x=_x;
+        var pending_space=false;
+        var paragraph=_paragraphs[paragraph_index];
+        for(var segment_index=0;segment_index<array_length(paragraph);++segment_index) {
+            var segment=paragraph[segment_index];
+            var word="";
+            var length=string_length(segment.text);
+            for(var character_index=1;character_index<=length+1;++character_index) {
+                var at_end=character_index>length;
+                var character=at_end ? "" : string_char_at(segment.text,character_index);
+                if(at_end || character==" ") {
+                    if(string_length(word)>0) {
+                        var space_width=pending_space ? string_width(" ") : 0;
+                        var word_width=string_width(word);
+                        if(cursor_x>_x && cursor_x+space_width+word_width>_x+_width) {
+                            cursor_x=_x;
+                            cursor_y+=_line_height;
+                            space_width=0;
+                        }
+                        cursor_x+=space_width;
+                        draw_set_colour(_colour);
+                        draw_text(cursor_x,cursor_y,word);
+                        if(segment.term!=GlossaryTerm.None) {
+                            var text_height=string_height(word);
+                            draw_set_colour(theme.underline);
+                            draw_line(cursor_x,cursor_y+text_height+1,cursor_x+word_width,cursor_y+text_height+1);
+                            ui_register_term(segment.term,cursor_x,cursor_y,cursor_x+word_width,cursor_y+text_height+3);
+                        }
+                        cursor_x+=word_width;
+                        word="";
+                    }
+                    if(!at_end) pending_space=true;
+                } else {
+                    word+=character;
+                }
+            }
+        }
+        cursor_y+=_line_height;
+    }
+    return cursor_y;
+}
+
 function ui_handle_input() {
     if(!mouse_check_button_pressed(mb_left)) return;
     var action=ui_action_at_pointer();
-    if(action<0) return;
+    if(action==UiAction.None) return;
     obj_ui.press_control=action; obj_ui.press_pulse=1;
-    if(action==7) {
+    if(action==UiAction.Spawn) {
         if(!obj_game.paused) instance_create_depth(0,0,0,obj_enemy,{enemy_type:"heavy"});
         return;
     }
     var tower=obj_game.selected_tower;
-    if(action>=3 && action<=5) {
-        var requested_tab=action-3;
-        if(tower.ability_detail_open && tower.ability_tab==requested_tab) {
-            tower.ability_detail_open=false;
-        } else {
+    if(action>=UiAction.AbilityDoubleTap && action<=UiAction.AbilityDoubleTap+array_length(obj_game.selected_tower.definition.abilities)-1) {
+        var requested_tab=action-UiAction.AbilityDoubleTap;
+        if(tower.ability_detail_open && tower.ability_tab==requested_tab) tower.ability_detail_open=false;
+        else {
             tower.ability_tab=requested_tab;
             tower.ability_detail_open=true;
         }
         obj_ui.detail_blend=0;
         return;
     }
-    if(action==0) { tower.target_mode=(tower.target_mode+1) mod 3; tower.select_pulse=0.5; }
-    if(action==1) tower_request_charge(tower);
-    if(action==2) {
-        if(tower.relocating) tower_cancel_move();
+    if(action==UiAction.Target) {
+        tower.target_mode=(tower.target_mode+1) mod TowerTargetMode.Count;
+        tower.select_pulse=0.5;
+    }
+    if(action==UiAction.Charge) tower_request_charge(tower);
+    if(action==UiAction.Move) {
+        if(tower.move_active) tower.reject_pulse=1;
+        else if(tower.relocating) tower_cancel_move();
         else tower_request_move(tower);
     }
 }
+
 function ui_draw_button(_control,_label,_enabled,_active=false) {
+    var theme=obj_game.ui_theme;
     var r=ui_control_rect(_control);
     var px=obj_ui.panel_left; var py=ui_panel_y();
     var hover=obj_ui.button_hover[_control];
     var press=obj_ui.press_control==_control ? obj_ui.press_pulse : 0;
     var inset=press*1.5;
-    var accent=make_colour_rgb(132,220,234);
-    var base=merge_colour(make_colour_rgb(15,23,32),make_colour_rgb(28,61,72),_active ? 1 : hover*0.7);
+    var base=merge_colour(theme.surface,theme.surface_hover,hover*0.8);
+    if(_active) base=merge_colour(base,theme.surface_active,0.8);
     draw_set_colour(base);
     draw_rectangle(px+r[0]+inset,py+r[1]+inset,px+r[2]-inset,py+r[3]-inset,false);
-    draw_set_colour(merge_colour(make_colour_rgb(57,79,91),accent,hover*0.6+(_active ? 0.4 : 0)));
+    draw_set_colour(merge_colour(theme.border,theme.title,_active ? 0.4 : hover*0.28));
     draw_rectangle(px+r[0]+inset,py+r[1]+inset,px+r[2]-inset,py+r[3]-inset,true);
-    draw_set_colour(_enabled ? (_active ? accent : c_white) : make_colour_rgb(117,137,150));
+    draw_set_colour(_enabled ? theme.title : theme.disabled);
     draw_set_halign(fa_center); draw_set_valign(fa_middle);
     draw_text(px+(r[0]+r[2])/2,py+(r[1]+r[3])/2+press,_label);
     draw_set_halign(fa_left); draw_set_valign(fa_top);
 }
-function ui_draw_stat(_x,_y,_label,_value) {
-    draw_set_colour(make_colour_rgb(137,155,167));
-    draw_text(_x,_y,_label);
-    draw_set_colour(make_colour_rgb(235,244,247));
-    draw_text_transformed(_x,_y+20,_value,1.25,1.25,0);
-}
+
 function ui_draw_world_feedback() {
     with(obj_tower) {
-        // Hover previews range; an open tower panel keeps the full range visible.
         var visibility=max(hover_amount,selection_amount);
         if(visibility>=0.01) {
             var radius=attack_range*(0.82+0.18*visibility);
-            var accent=make_colour_rgb(139,216,232);
+            var range_colour=make_colour_rgb(196,202,207);
             draw_set_alpha(visibility*0.035);
-            draw_set_colour(accent);
+            draw_set_colour(range_colour);
             draw_primitive_begin(pr_trianglefan);
             draw_vertex(x,y);
             for(var i=0;i<=96;++i) {
@@ -123,10 +200,9 @@ function ui_draw_world_feedback() {
             draw_set_alpha(visibility*0.8);
             draw_range(world_x,world_y,radius);
         }
-        // Selection uses small corner brackets, not an attack-range circle.
         if(selection_amount>0.01) {
             draw_set_alpha(selection_amount);
-            draw_set_colour(c_white);
+            draw_set_colour(make_colour_rgb(235,237,239));
             var span=15+select_pulse*5;
             for(var side=-1;side<=1;side+=2) {
                 draw_line_width(x+side*span,y+4,x+side*span,y-2,1.5);

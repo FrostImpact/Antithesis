@@ -12,7 +12,7 @@ hovered_term=ui_term_at_pointer();
 tooltip_blend=lerp(tooltip_blend,hovered_term>=0 ? 1 : 0,1-exp(-18*dt));
 press_pulse=max(0,press_pulse-dt*6);
 var hovered_control=ui_action_at_pointer();
-for(var control=0;control<8;++control) button_hover[control]=lerp(button_hover[control],hovered_control==control ? 1 : 0,1-exp(-16*dt));
+for(var control=0;control<UiAction.Count;++control) button_hover[control]=lerp(button_hover[control],hovered_control==control ? 1 : 0,1-exp(-16*dt));
 with(obj_tower) {
     hover_amount=lerp(hover_amount,obj_input.hovered_tower==id ? 1 : 0,1-exp(-10*dt));
     selection_amount=lerp(selection_amount,obj_game.selected_tower==id ? 1 : 0,1-exp(-12*dt));

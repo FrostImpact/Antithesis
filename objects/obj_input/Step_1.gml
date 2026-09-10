@@ -53,3 +53,11 @@ if(keyboard_check_pressed(obj_game.config.pause_key)) obj_game.paused=!obj_game.
 if(keyboard_check_pressed(obj_game.config.charge_key)) tower_request_charge(obj_game.selected_tower);
 ui_handle_input();
 
+
+// Number keys select a fresh tower without interrupting a relocation.
+if(!obj_game.paused && !(instance_exists(obj_placement) && instance_exists(obj_placement.moving_tower))) {
+    if(keyboard_check_pressed(ord("1")) || keyboard_check_pressed(ord("2"))) {
+        obj_game.build_tower_type=keyboard_check_pressed(ord("2")) ? "wanderer" : "vestral";
+        if(!instance_exists(obj_placement)) instance_create_depth(0,0,0,obj_placement);
+    }
+}
