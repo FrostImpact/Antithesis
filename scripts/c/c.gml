@@ -8,7 +8,7 @@ function loadout_initialize() {
     obj_game.loadout={bits:200,keys:["","","","",""],copies:[0,0,0,0,0],cards:[2,1,1,0],
         selected:-1,hover:-1,fan_hover:[0,0,0,0],pending:-1,use_elapsed:0,use_duration:0.85,
         deck:[],deck_cursor:0,last_reward_round:0,kill_bonus:0,
-        notice:"Use a tower card, then select its loadout slot to place it.",notice_left:9};
+        notice:"Use a tower card, then select its loadout slot to place it.",notice_left:0};
 }
 function loadout_notice(_text) {
     obj_game.loadout.notice=_text; obj_game.loadout.notice_left=4;
@@ -18,7 +18,6 @@ function loadout_find_slot(_key) {
     return -1;
 }
 function loadout_refill_deck() {
-    // Six tower cards, two caches and one gameplay card per shuffled deck.
     var cards=[0,0,0,1,1,1,2,2,3];
     for(var i=array_length(cards)-1;i>0;--i) {
         var j=irandom(i); var swap=cards[i]; cards[i]=cards[j]; cards[j]=swap;
@@ -42,10 +41,9 @@ function loadout_use_card(_index) {
     var s=obj_game.loadout;
     if(obj_game.paused || s.pending>=0 || _index<0 || _index>=array_length(s.cards) || s.cards[_index]<=0) return false;
     var card=obj_game.card_catalog[_index];
-    if(card.tower!="" && loadout_find_slot(card.tower)<0 && loadout_find_slot("")<0) {
+    if(card.tower!="" && loadout_find_slot("")<0) {
         loadout_notice("All five loadout slots are occupied."); return false;
     }
-    // Reserve exactly one card. Its reward is committed once, at animation end.
     s.cards[_index]-=1; s.pending=_index; s.use_elapsed=0; s.selected=-1;
     return true;
 }
@@ -62,10 +60,11 @@ function loadout_tick(_dt) {
     var index=s.pending; var card=obj_game.card_catalog[index];
     s.pending=-1;
     if(card.tower!="") {
-        var slot=loadout_find_slot(card.tower);
-        if(slot<0) { slot=loadout_find_slot(""); s.keys[slot]=card.tower; }
-        s.copies[slot]+=1;
-        loadout_notice(card.title+" ready in slot "+string(slot+1)+".");
+        var slot=loadout_find_slot("");
+        if(slot>=0) {
+            s.keys[slot]=card.tower;
+            s.copies[slot]=1;
+        }
     } else if(index==2) { s.bits+=150; loadout_notice("Bit Cache opened: +150 Bits."); }
     else { s.kill_bonus+=2; loadout_notice("Bounty Protocol active: +"+string(s.kill_bonus)+" Bits per kill."); }
 }
@@ -81,7 +80,7 @@ function loadout_select(_slot) {
         loadout_notice("Finish or cancel the current move first."); return false;
     }
     if(!loadout_can_place(_slot)) {
-        loadout_notice(s.copies[_slot]<=0 ? "Use another tower card to gain a copy." : "Not enough Bits to deploy this tower.");
+        loadout_notice("Not enough Bits to deploy this tower.");
         return false;
     }
     obj_game.build_tower_type=s.keys[_slot]; s.selected=-1;
@@ -94,13 +93,13 @@ function loadout_place(_wx,_wy) {
     var tower=instance_create_depth(project_x(_wx,_wy),project_y(_wx,_wy),-project_y(_wx,_wy),obj_tower,
         {world_x:_wx,world_y:_wy,tower_type:obj_game.build_tower_type});
     if(!instance_exists(tower)) return noone;
-    obj_game.loadout.copies[slot]-=1;
+    obj_game.loadout.keys[slot]="";
+    obj_game.loadout.copies[slot]=0;
     obj_game.loadout.bits-=tower.definition.bit_cost;
     return tower;
 }
 
-// Shared geometry for drawing and hit testing, in fixed GUI coordinates.
-function loadout_slot_rect(_slot) { return [383+_slot*122,638,495+_slot*122,758]; }
+function loadout_slot_rect(_slot) { return [428+_slot*105,658,518+_slot*105,748]; }
 function loadout_card_pose(_index) {
     var s=obj_game.loadout; var rank=0;
     for(var i=0;i<_index;++i) if(s.cards[i]>0) rank+=1;
@@ -121,7 +120,6 @@ function loadout_card_contains(_index,_mx,_my) {
 function loadout_card_at_pointer() {
     var s=obj_game.loadout; var mx=device_mouse_x_to_gui(0); var my=device_mouse_y_to_gui(0);
     if(s.hover>=0 && s.cards[s.hover]>0 && point_in_rectangle(mx,my,24,278,276,530)) return s.hover;
-    // The selected card is drawn last, so it receives overlapping clicks first.
     if(s.selected>=0 && s.cards[s.selected]>0 && loadout_card_contains(s.selected,mx,my)) return s.selected;
     if(s.selected<0 && s.hover>=0 && s.cards[s.hover]>0 && loadout_card_contains(s.hover,mx,my)) return s.hover;
     for(var i=array_length(s.cards)-1;i>=0;--i)
@@ -139,8 +137,7 @@ function loadout_handle_input() {
     if(!mouse_check_button_pressed(mb_left) || !loadout_pointer_blocked()) return false;
     var s=obj_game.loadout; var mx=device_mouse_x_to_gui(0); var my=device_mouse_y_to_gui(0);
     if((s.selected>=0 || s.hover>=0) && point_in_rectangle(mx,my,24,278,276,530)) {
-        if(point_in_rectangle(mx,my,42,484,258,518)) loadout_use_card(s.selected>=0 ? s.selected : s.hover);
-        else if(point_in_rectangle(mx,my,246,282,272,310)) { s.selected=-1; s.hover=-1; }
+        if(point_in_rectangle(mx,my,246,282,272,310)) { s.selected=-1; s.hover=-1; }
         return true;
     }
     for(var i=0;i<5;++i) {
@@ -148,7 +145,10 @@ function loadout_handle_input() {
         if(point_in_rectangle(mx,my,r[0],r[1],r[2],r[3])) { loadout_select(i); return true; }
     }
     var card=loadout_card_at_pointer();
-    if(card>=0) s.selected=s.selected==card ? -1 : card;
+    if(card>=0) {
+        if(s.selected==card) loadout_use_card(card);
+        else s.selected=card;
+    }
     return true;
 }
 
@@ -183,8 +183,6 @@ function loadout_draw() {
     draw_set_colour(theme.surface); draw_rectangle(1120,24,1342,92,false);
     draw_set_colour(make_colour_rgb(236,202,121)); draw_text(1136,34,string(s.bits)+" BITS");
     var equipped=0;for(var i=0;i<5;++i) if(s.keys[i]!="") equipped+=1;
-    draw_set_colour(theme.copy); draw_text(1136,62,string(equipped)+" / 5 EQUIPPED");
-    // The lower-left quarter disc is a permanent, tangible card storage pocket.
     draw_set_colour(make_colour_rgb(23,29,31));
     draw_primitive_begin(pr_trianglefan); draw_vertex(0,768);
     for(var arc=0;arc<=32;++arc) draw_vertex(dcos(arc/32*90)*190,768-dsin(arc/32*90)*190);
@@ -198,8 +196,7 @@ function loadout_draw() {
         if(s.cards[i]>0 && i!=front) loadout_draw_card(i,loadout_card_pose(i));
     }
     if(front>=0 && s.cards[front]>0) loadout_draw_card(front,loadout_card_pose(front));
-    draw_set_colour(theme.title); draw_text(16,720,"CARDS  "+string(total));
-    draw_set_colour(theme.muted); draw_text_transformed(16,745,"HOVER / SELECT",0.65,0.65,0);
+    
     var detail=s.selected>=0 ? s.selected : s.hover;
     if(detail>=0 && s.cards[detail]>0) {
         var card=obj_game.card_catalog[detail];
@@ -213,27 +210,28 @@ function loadout_draw() {
             draw_set_colour(theme.surface); draw_set_halign(fa_center); draw_text(150,376,detail==2 ? "B" : "+"); draw_set_halign(fa_left);
         }
         draw_set_colour(theme.copy); draw_text_ext(42,424,card.copy,17,216);
-        draw_set_colour(theme.surface_active); draw_rectangle(42,484,258,518,false);
-        draw_set_colour(obj_game.paused || s.pending>=0 ? theme.disabled : card.accent);
-        draw_set_halign(fa_center); draw_text(150,492,"USE CARD");
         draw_set_halign(fa_left); draw_set_colour(theme.muted); draw_text(253,289,"x");
     }
-    draw_set_colour(theme.surface); draw_rectangle(373,608,993,768,false);
-    draw_set_colour(theme.muted); draw_text(387,616,"LOADOUT");
-    draw_set_halign(fa_right); draw_text(979,616,"SELECT 1-5 / PLACE / RIGHT-CLICK CANCEL"); draw_set_halign(fa_left);
+
     for(var slot=0;slot<5;++slot) {
         var r=loadout_slot_rect(slot); var key=s.keys[slot];
         var active=instance_exists(obj_placement) && !instance_exists(obj_placement.moving_tower) && obj_game.build_tower_type==key;
-        draw_set_colour(active ? theme.surface_active : theme.surface_hover); draw_rectangle(r[0],r[1],r[2],r[3],false);
-        draw_set_colour(active ? make_colour_rgb(187,244,72) : theme.border); draw_rectangle(r[0],r[1],r[2],r[3],true);
-        draw_set_colour(theme.title); draw_text(r[0]+7,r[1]+5,string(slot+1));
-        if(key=="") { draw_set_colour(theme.disabled); draw_text(r[0]+29,r[1]+48,"EMPTY"); continue; }
+        if(active) {
+            draw_set_colour(theme.surface_active);
+            draw_rectangle(r[0],r[1],r[2],r[3],false);
+        }
+        var border_col=active ? make_colour_rgb(187,244,72) : merge_colour(theme.border,c_black,0.5);
+        draw_set_colour(border_col);
+        draw_line_width(r[0],r[1],r[2],r[1],3);
+        draw_line_width(r[2],r[1],r[2],r[3],3);
+        draw_line_width(r[2],r[3],r[0],r[3],3);
+        draw_line_width(r[0],r[3],r[0],r[1],3);
+        draw_set_colour(theme.title); draw_text(r[0]+6,r[1]+4,string(slot+1));
+        if(key=="") { draw_set_colour(theme.disabled); draw_text(r[0]+20,r[1]+35,"EMPTY"); continue; }
         var d=tower_definition(key);
-        draw_set_alpha(s.copies[slot]>0 ? 1 : 0.35); d.draw_model((r[0]+r[2])*0.5,r[1]+69,300,0,0,0,0,0,1.5); draw_set_alpha(1);
-        draw_set_halign(fa_right); draw_set_colour(theme.title); draw_text(r[2]-7,r[1]+5,"x"+string(s.copies[slot])); draw_set_halign(fa_left);
-        draw_set_colour(theme.copy); draw_text_transformed(r[0]+7,r[1]+80,d.name,0.68,0.68,0);
+        draw_set_alpha(1); d.draw_model((r[0]+r[2])*0.5,r[1]+43,300,0,0,0,0,0,1.25);
         draw_set_colour(loadout_can_place(slot) ? make_colour_rgb(187,244,72) : theme.disabled);
-        draw_text(r[0]+7,r[1]+99,string(d.bit_cost)+" BITS");
+        draw_text(r[0]+6,r[1]+68,string(d.bit_cost)+" BITS");
     }
     if(s.notice_left>0) {
         draw_set_colour(theme.surface); draw_rectangle(373,564,993,598,false);
