@@ -1,4 +1,37 @@
 // Short-lived combat effects are distinct from the static map and its range overlays.
+// A shared insignia: a hooded hunter, split leaf wings and a luminous sight slit.
+// Vector geometry keeps the small badge and the floating reward equally crisp.
+function draw_vigil_icon(_x,_y,_size) {
+    var pale=make_colour_rgb(228,237,203);
+    var lime=make_colour_rgb(187,244,72);
+    var dark=make_colour_rgb(34,42,32);
+    draw_set_colour(pale);
+    draw_triangle(_x,_y-_size,_x-_size*0.57,_y+_size*0.46,_x+_size*0.57,_y+_size*0.46,false);
+    draw_set_colour(dark);
+    draw_triangle(_x,_y-_size*0.45,_x-_size*0.32,_y+_size*0.26,_x+_size*0.32,_y+_size*0.26,false);
+    draw_set_colour(lime);
+    draw_triangle(_x-_size,_y-_size*0.32,_x-_size*0.38,_y+_size*0.12,_x-_size*0.28,_y+_size*0.76,false);
+    draw_triangle(_x+_size,_y-_size*0.32,_x+_size*0.38,_y+_size*0.12,_x+_size*0.28,_y+_size*0.76,false);
+    draw_line_width(_x,_y-_size*0.18,_x,_y+_size*0.2,max(1,_size*0.12));
+    diamond(_x,_y+_size*0.65,_size*0.15,_size*0.2,pale);
+}
+
+function tower_draw_shadow(_tower) {
+    var z=obj_camera.zoom;
+    var lift=_tower.move_active ? sin(tower_move_progress(_tower)*pi) : 0;
+    var fade=(_tower.relocating && !_tower.move_active ? 0.25 : 1)*(1-lift*0.55);
+    var radius=(_tower.definition.key=="wanderer" ? 17 : 15)*z*(1+lift*0.22);
+    var sx=project_x(_tower.world_x,_tower.world_y);
+    var sy=project_y(_tower.world_x,_tower.world_y)+2*z;
+    draw_set_colour(make_colour_rgb(22,28,29));
+    for(var shadow_ring=0;shadow_ring<8;++shadow_ring) {
+        var r=radius*(1-shadow_ring*0.09);
+        draw_set_alpha(fade*(0.016+shadow_ring*0.005));
+        draw_ellipse(sx-r,sy-r*0.32,sx+r,sy+r*0.32,false);
+    }
+    draw_set_alpha(1);
+}
+
 function tower_draw_attack_fx(_tower) {
     if(_tower.definition.key=="wanderer") { wanderer_draw_shot_fx(_tower); return; }
     if(_tower.beam<=0) return;
@@ -155,8 +188,8 @@ function wanderer_draw_shot_fx(_tower) {
     for(var i=0;i<44;++i) {
         var impact=i>=18;var dir=impact ? i*137.5 : angle+(i-9)*6;
         var travel=(1-power(1-t,3))*(impact ? 14+(i mod 7)*6 : 10+(i mod 5)*6)*z;
-        var px=(impact ? tx : muzzle[0])+dcos(direction)*travel;
-        var py=(impact ? ty : muzzle[1])+dsin(direction)*travel+t*t*15*z;
+        var px=(impact ? tx : muzzle[0])+dcos(dir)*travel;
+        var py=(impact ? ty : muzzle[1])+dsin(dir)*travel+t*t*15*z;
         wanderer_leaf(px,py,dir+t*180,(2+(i mod 4))*fade*z,fade*fade*(impact ? 0.9 : 0.65));
     }
     // Impact fracture: four long slashes open outward, distinct from shock rings.
@@ -181,5 +214,4 @@ function wanderer_draw_move_fx(_tower) {
     }
     draw_set_alpha(1);gpu_set_blendmode(bm_normal);
 }
-
 

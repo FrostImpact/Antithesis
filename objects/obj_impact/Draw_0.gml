@@ -1,3 +1,31 @@
+if(effect_kind=="vigil") {
+    var t=clamp(age/lifetime,0,1);
+    var z=obj_camera.zoom;
+    var lift=(1-power(1-t,3))*22+sin(t*pi)*12;
+    var px=project_x(world_x,world_y);
+    var py=project_y(world_x,world_y)-max(60,58*z)-lift*z;
+    var pop=0.7+0.3*min(1,t/0.12)+sin(min(1,t/0.35)*pi)*0.22;
+    draw_set_alpha(1-power(clamp((t-0.4)/0.6,0,1),2));
+    draw_vigil_icon(px-5*z,py,9*z*pop);
+    draw_set_colour(make_colour_rgb(225,249,176));
+    draw_set_halign(fa_left); draw_set_valign(fa_middle);
+    draw_text_transformed(px+7*z,py,"+"+string(popup_stacks),0.8*z*pop,0.8*z*pop,0);
+    draw_set_alpha(1); draw_set_valign(fa_top);
+    exit;
+}
+if(effect_kind=="text") {
+    var t=clamp(age/lifetime,0,1);
+    var lift=(1-power(1-t,3))*17+sin(t*pi)*7;
+    var px=project_x(world_x,world_y)+(popup_status ? 0 : (popup_lane-1)*9);
+    var py=project_y(world_x,world_y)-44-(popup_status ? 20 : 8)-lift;
+    draw_set_halign(fa_center); draw_set_valign(fa_bottom);
+    draw_set_alpha(1-clamp((t-0.3)/0.7,0,1));
+    draw_set_colour(c_black);draw_text(px+1,py+1,popup_text);
+    draw_set_colour(popup_status ? make_colour_rgb(205,226,176) : make_colour_rgb(242,243,232));
+    draw_text(px,py,popup_text);
+    draw_set_alpha(1);draw_set_halign(fa_left);draw_set_valign(fa_top);
+    exit;
+}
 x=project_x(world_x,world_y); y=project_y(world_x,world_y)-20*obj_camera.zoom;
 var t=clamp(age/lifetime,0,1);
 var fade=(1-t)*(1-t);

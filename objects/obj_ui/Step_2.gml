@@ -1,5 +1,6 @@
 var dt=min(delta_time/1000000,0.05);
 ui_time+=dt;
+loadout_tick(dt);
 if(!instance_exists(obj_game.selected_tower)) obj_game.selected_tower=noone;
 panel_blend=lerp(panel_blend,instance_exists(obj_game.selected_tower) ? 1 : 0,1-exp(-14*dt));
 var open_goal=instance_exists(obj_game.selected_tower) ? 1 : 0;
@@ -20,7 +21,7 @@ with(obj_tower) {
     reject_pulse=max(0,reject_pulse-dt*3);
 }
 
-var next_cursor=(ui_action_at_pointer()>=0 || hovered_term>=0 || instance_exists(obj_input.hovered_tower)) ? cr_handpoint : cr_default;
+var next_cursor=(ui_action_at_pointer()>=0 || hovered_term>=0 || loadout_pointer_blocked() || instance_exists(obj_input.hovered_tower)) ? cr_handpoint : cr_default;
 if(next_cursor!=active_cursor) { window_set_cursor(next_cursor); active_cursor=next_cursor; }
 
 

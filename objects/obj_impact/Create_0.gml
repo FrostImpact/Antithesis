@@ -2,6 +2,8 @@ if(!variable_instance_exists(id,"effect_kind")) effect_kind=burst ? "kill" : "hi
 age=0;
 lifetime=effect_kind=="finisher" ? 0.7 : (effect_kind=="kill" ? 0.6 : 0.3);
 particles=[];
+if(effect_kind=="vigil") { lifetime=0.95; exit; }
+if(effect_kind=="text") { lifetime=popup_status ? 0.65 : 0.7; exit; }
 var count=effect_kind=="finisher" ? 20 : (effect_kind=="kill" ? 14 : 6);
 for(var i=0;i<count;++i) {
     var angle=i/count*360+random_range(-14,14);

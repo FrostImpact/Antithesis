@@ -1,0 +1,1 @@
+{"$GMScript":"v1","%Name":"scr_blanks","isCompatibility":false,"isDnD":false,"name":"scr_blanks","parent":{"name":"Rendering","path":"folders/Scripts/Rendering.yy"},"resourceType":"GMScript","resourceVersion":"2.0"}

@@ -11,18 +11,17 @@ if(obj_game.paused) { draw_set_colour(theme.title); draw_text(30,30,"PAUSED"); }
 var spawn_inset=press_control==UiAction.Spawn ? press_pulse*1.5 : 0;
 draw_set_colour(merge_colour(theme.surface,theme.surface_hover,button_hover[UiAction.Spawn]));
 draw_rectangle(spawn_left+spawn_inset,spawn_top+spawn_inset,spawn_left+spawn_width-spawn_inset,spawn_top+spawn_height-spawn_inset,false);
-draw_set_colour(obj_game.paused ? theme.disabled : theme.border);
+var round_waiting=obj_encounter.phase=="preparation" || obj_encounter.phase=="intermission";
+var round_ready=!obj_game.paused && instance_exists(obj_tower) && round_waiting;
+draw_set_colour(round_ready ? theme.border : theme.disabled);
 draw_rectangle(spawn_left+spawn_inset,spawn_top+spawn_inset,spawn_left+3,spawn_top+spawn_height-spawn_inset,false);
-draw_set_colour(obj_game.paused ? theme.disabled : theme.title);
-draw_text(spawn_left+14,spawn_top+8,"SPAWN HEAVY");
+draw_set_colour(round_ready ? theme.title : theme.disabled);
+draw_text(spawn_left+14,spawn_top+8,round_waiting ? "START ROUND" : "ROUND ACTIVE");
 draw_set_colour(theme.muted);
-draw_set_halign(fa_right); draw_text(spawn_left+spawn_width-12,spawn_top+8,"300 HP"); draw_set_halign(fa_left);
-
+draw_set_halign(fa_right); draw_text(spawn_left+spawn_width-12,spawn_top+8,string(obj_encounter.round_number+(round_waiting ? 1 : 0))); draw_set_halign(fa_left);
 draw_set_colour(theme.copy);
-draw_text(30,114,"BUILD  [1] VESTRAL   [2] WANDERER");
-if(instance_exists(obj_placement) && !instance_exists(obj_placement.moving_tower)) draw_text(30,136,"Placing "+string_upper(obj_game.build_tower_type)+" — click open ground");
 
-if(!instance_exists(obj_game.selected_tower)) exit;
+if(!instance_exists(obj_game.selected_tower)) { loadout_draw(); exit; }
 var tower=obj_game.selected_tower;
 var definition=tower.definition;
 var px=panel_left; var py=ui_panel_y();
@@ -45,7 +44,17 @@ draw_set_halign(fa_right); draw_text(px+346,py+15,tower_status(tower)); draw_set
 ui_draw_rich_text(px+14,py+45,332,definition.role_copy,18,theme.copy);
 
 draw_set_colour(theme.muted);
-draw_text(px+14,py+72,definition.key=="wanderer" ? "VIGIL  "+string(tower.vigil)+"  /  EARNED  "+string(tower.vigil_earned) : "CC / SUB-DPS");
+draw_text(px+14,py+72,definition.key=="wanderer" ? "EXECUTION / SNIPER" : "CC / SUB-DPS");
+if(definition.key=="wanderer") {
+    draw_set_colour(theme.surface);draw_rectangle(px,py-54,px+44,py-10,false);
+    draw_set_colour(make_colour_rgb(159,193,99));draw_rectangle(px,py-54,px+44,py-10,true);
+    draw_vigil_icon(px+22,py-40,12);
+    draw_set_colour(theme.title);draw_set_halign(fa_center);
+    var count_text=string(tower.vigil);
+    var count_scale=min(0.85,36/max(1,string_width(count_text)));
+    draw_text_transformed(px+22,py-27,count_text,count_scale,count_scale,0);
+    draw_set_halign(fa_left);
+}
 draw_set_colour(theme.divider);
 draw_line(px+14,py+101,px+346,py+101);
 var labels=["ATK","RATE","RANGE","CHARGE"];
@@ -106,7 +115,7 @@ if(hovered_term!=GlossaryTerm.None && tooltip_blend>0.01) {
     var anchor=ui_term_anchor(hovered_term);
     if(!is_undefined(anchor)) {
         var glossary=obj_game.glossary_catalog[hovered_term];
-        var tip_w=338; var tip_h=68;
+        var tip_w=338; var tip_h=45+string_height_ext(glossary.body,16,tip_w-28);
         var tip_x=clamp((anchor.left+anchor.right-tip_w)*0.5,8,obj_game.config.gui_width-tip_w-8);
         var tip_y=max(8,anchor.top-tip_h-8);
         tooltip_rect=[tip_x,tip_y,tip_x+tip_w,tip_y+tip_h];
@@ -121,4 +130,19 @@ if(hovered_term!=GlossaryTerm.None && tooltip_blend>0.01) {
         draw_set_colour(theme.copy); draw_text_ext(tip_x+14,tip_y+31,glossary.body,16,tip_w-28);
     }
 }
+// Live stat calculations use the same values that combat reads.
+var stat_mx=device_mouse_x_to_gui(0)-px;var stat_my=device_mouse_y_to_gui(0)-py;
+if(point_in_rectangle(stat_mx,stat_my,14,110,346,164)) {
+    var stat_index=clamp(floor((stat_mx-14)/84),0,3);
+    var detail=ui_stat_breakdown(tower,stat_index);
+    var width=340;var height=45+string_height_ext(detail.body,18,width-28);
+    var sx=clamp(px+14+stat_index*84,8,obj_game.config.gui_width-width-8);
+    var sy=max(8,py-height-12);
+    draw_set_alpha(panel_blend*0.98);draw_set_colour(theme.surface);
+    draw_rectangle(sx,sy,sx+width,sy+height,false);
+    draw_set_colour(theme.border);draw_rectangle(sx,sy,sx+width,sy+height,true);
+    draw_set_colour(theme.title);draw_text(sx+14,sy+9,detail.title);
+    draw_set_colour(theme.copy);draw_text_ext(sx+14,sy+31,detail.body,18,width-28);
+}
 draw_set_alpha(1);
+loadout_draw();

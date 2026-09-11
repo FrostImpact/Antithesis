@@ -1,5 +1,5 @@
-panel_left=24;
-panel_top=438;
+panel_left=300;
+panel_top=250;
 panel_blend=0;
 ui_time=0;
 active_cursor=cr_default;

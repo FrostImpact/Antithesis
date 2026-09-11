@@ -38,7 +38,7 @@ function build_glossary_catalog() {
 function build_tower_catalog() {
     return {vestral:{key:"vestral",name:"VESTRAL",role:"A survivor of great powers",
         description:"A survivor of great powers",
-        damage:20,attack_range:2.65,attack_interval:0.8,charge_duration:3.2,
+        damage:20,bit_cost:75,attack_range:2.65,attack_interval:0.8,charge_duration:3.2,
         burst_interval:0.09,charge_reuse_delay:6,
         hits_per_attack:2,shot_interval:0.09,hit_multiplier:0.5,
         shock_per_stack:0.05,shock_max_stacks:8,shock_duration:0.4,lock_duration:0.8,
@@ -58,8 +58,8 @@ function build_tower_catalog() {
         ],
         draw_model:draw_defender,muzzle:defender_muzzle
     },wanderer:{key:"wanderer",name:"WANDERER",role:"The patient hunter",
-        description:"The patient hunter",damage:60,attack_range:3.4,attack_interval:1,
-        charge_duration:1.5,charge_reuse_delay:8,burst_interval:0.09,
+        description:"The patient hunter",damage:60,bit_cost:120,attack_range:3.4,attack_interval:1,
+        charge_duration:2.5,charge_reuse_delay:8,kill_cooldown_reduction:0.6,burst_interval:0.09,
         hits_per_attack:1,shot_interval:0.2,hit_multiplier:1,
         vigil_damage_step:25,vigil_attack:2,vigil_attack_reduced:0.5,vigil_breakpoint:12,
         role_copy:[[ui_segment("“The patient hunter”")]],
@@ -67,13 +67,11 @@ function build_tower_catalog() {
             {id:0,label:"VIGIL",kind:"PASSIVE",title:"Vigil",paragraphs:[[ui_segment("WANDERER does not attack normally.")]]},
             {id:1,label:"MARK OF THE HUNTER",kind:"PASSIVE",title:"Mark of the Hunter",paragraphs:[
                 [ui_segment("Basic Attacks execute enemies below 3.5% HP, before or after the hit.")],
+                [ui_segment("Kills remove 60% of Execution's remaining cooldown.")],
                 [ui_segment("Kills grant 1 Vigil per 25 damage dealt (rounded up, 1–4). Each grants permanent +2 ATK; after 12 earned, +0.5 ATK instead.")]]},
             {id:2,label:"EXECUTION",kind:"CHARGE SKILL",title:"Execution",paragraphs:[
-                [ui_segment("Charge for 1.5s, then fire at any range using targeting priority. Kills reset its 8s cooldown.")],
-                [ui_segment("Spends 1 available Vigil. Usable at zero; permanent ATK is retained.")]]},
-            {id:3,label:"SKILLED SNIPER",kind:"MOVE SKILL",title:"Skilled Sniper",paragraphs:[
-                [ui_segment("After moving, instantly perform a Basic Attack at a target in range.")],
-                [ui_segment("Spends 1 available Vigil on arrival, even without a target. Usable at zero; permanent ATK is retained.")]]}
+                [ui_segment("Charge for 2.5s, then fire at any range using targeting priority. Cooldown: 8s.")],
+                [ui_segment("Does not consume Vigil. Permanent ATK is retained.")]]}
         ],draw_model:draw_wanderer,muzzle:wanderer_muzzle
     }};
 }
@@ -95,7 +93,11 @@ function game_select_tower(_tower) {
 
 
 function build_enemy_catalog() {
-    return {intrusion:{max_hit_points:100,move_speed:0.8},
-        heavy:{max_hit_points:300,move_speed:0.4}};
+    // Suspended void fragments: 48 hover frames, no walking rig.
+    return {intrusion:{name:"HUSK",max_hit_points:100,move_speed:0.56,
+            model:"husk",height:55,visual_height:56,width:14,drift_period:3.0,spawn_duration:0.65,visual_scale:0.88},
+        fast:{name:"WISP",max_hit_points:55,move_speed:0.95,
+            model:"wisp",height:50,visual_height:51,width:9,drift_period:2.4,spawn_duration:0.55,visual_scale:0.78},
+        heavy:{name:"HULK",max_hit_points:300,move_speed:0.28,
+            model:"hulk",height:61,visual_height:62,width:19,drift_period:3.6,spawn_duration:0.8,visual_scale:0.94}};
 }
-

@@ -29,6 +29,7 @@ function ui_spawn_hovered() {
 
 function ui_pointer_blocked() {
     if(!instance_exists(obj_ui)) return false;
+    if(loadout_pointer_blocked()) return true;
     if(ui_spawn_hovered()) return true;
     var pointer_x=device_mouse_x_to_gui(0); var pointer_y=device_mouse_y_to_gui(0);
     if(obj_ui.tooltip_blend>0.01 && ui_point_in_local_rect(pointer_x,pointer_y,obj_ui.tooltip_rect)) return true;
@@ -36,6 +37,7 @@ function ui_pointer_blocked() {
     var mx=pointer_x-obj_ui.panel_left;
     var my=pointer_y-ui_panel_y();
     if(point_in_rectangle(mx,my,0,0,360,198)) return true;
+    if(obj_game.selected_tower.definition.key=="wanderer" && point_in_rectangle(mx,my,0,-54,44,-10)) return true;
     for(var action=UiAction.Target;action<=UiAction.AbilityDoubleTap+array_length(obj_game.selected_tower.definition.abilities)-1;++action) {
         if(ui_point_in_local_rect(mx,my,ui_control_rect(action))) return true;
     }
@@ -93,6 +95,19 @@ function ui_draw_rich_text(_x,_y,_width,_paragraphs,_line_height,_colour) {
         var paragraph=_paragraphs[paragraph_index];
         for(var segment_index=0;segment_index<array_length(paragraph);++segment_index) {
             var segment=paragraph[segment_index];
+            // Keep a glossary phrase together, including its spaces and underline.
+            if(segment.term!=GlossaryTerm.None && string_width(segment.text)<=_width) {
+                var gap=pending_space ? string_width(" ") : 0;
+                var span=string_width(segment.text);
+                if(cursor_x>_x && cursor_x+gap+span>_x+_width) { cursor_x=_x;cursor_y+=_line_height;gap=0; }
+                cursor_x+=gap;
+                draw_set_colour(_colour);draw_text(cursor_x,cursor_y,segment.text);
+                var baseline=cursor_y+string_height(segment.text)+1;
+                draw_set_colour(theme.underline);draw_line(cursor_x,baseline,cursor_x+span,baseline);
+                ui_register_term(segment.term,cursor_x,cursor_y,cursor_x+span,baseline+2);
+                cursor_x+=span;pending_space=false;
+                continue;
+            }
             var word="";
             var length=string_length(segment.text);
             for(var character_index=1;character_index<=length+1;++character_index) {
@@ -130,13 +145,35 @@ function ui_draw_rich_text(_x,_y,_width,_paragraphs,_line_height,_colour) {
     return cursor_y;
 }
 
+function ui_stat_breakdown(_tower,_stat) {
+    var d=_tower.definition;
+    if(_stat==0) {
+        var bonus=0;var body="Base ATK: "+string(d.damage);
+        if(d.key=="wanderer") {
+            var first=min(_tower.vigil_earned,d.vigil_breakpoint);
+            var later=max(0,_tower.vigil_earned-d.vigil_breakpoint);
+            bonus=first*d.vigil_attack+later*d.vigil_attack_reduced;
+            body+="\nVigil: "+string(first)+" x "+string(d.vigil_attack)+" = +"+string(first*d.vigil_attack);
+            body+="\nAfter 12: "+string(later)+" x "+string(d.vigil_attack_reduced)+" = +"+string(later*d.vigil_attack_reduced);
+        }
+        body+="\nOther adjustments: "+string(_tower.damage-d.damage-bonus);
+        body+="\nTotal ATK: "+string(_tower.damage);
+        if(d.key=="vestral") body+="\nDouble Tap: 2 hits x 50% = "+string(_tower.damage*0.5)+" per hit.";
+        return {title:"ATTACK DAMAGE",body:body};
+    }
+    if(_stat==1) return {title:"ATTACK RATE",body:"Base: "+string_format(1/d.attack_interval,1,2)+" attacks/s\nSpeed adjustment: "+string_format((d.attack_interval/_tower.attack_interval-1)*100,1,1)+"%\nTotal: 1 / "+string_format(_tower.attack_interval,1,2)+"s = "+string_format(1/_tower.attack_interval,1,2)+" attacks/s"+(d.key=="wanderer" ? "\nVigil disables automatic attacks. Skills fire once." : "\nDowntime starts after the second hit.")};
+    if(_stat==2) return {title:"ATTACK RANGE",body:"Base: "+string(d.attack_range)+"\nAdjustments: "+string(_tower.attack_range-d.attack_range)+"\nTotal: "+string(_tower.attack_range)+(d.key=="wanderer" ? "\nExecution ignores range." : "")};
+    return {title:"CHARGE TIME",body:"Base: "+string(d.charge_duration)+"s\nAdjustments: "+string(_tower.charge_duration-d.charge_duration)+"s\nTotal: "+string(_tower.charge_duration)+"s\nSkill cooldown: "+string(d.charge_reuse_delay)+"s base + "+string(_tower.charge_reuse_delay-d.charge_reuse_delay)+"s adjustment = "+string(_tower.charge_reuse_delay)+"s"};
+}
+
 function ui_handle_input() {
+    if(loadout_handle_input()) return;
     if(!mouse_check_button_pressed(mb_left)) return;
     var action=ui_action_at_pointer();
     if(action==UiAction.None) return;
     obj_ui.press_control=action; obj_ui.press_pulse=1;
     if(action==UiAction.Spawn) {
-        if(!obj_game.paused) instance_create_depth(0,0,0,obj_enemy,{enemy_type:"heavy"});
+        encounter_start_round();
         return;
     }
     var tower=obj_game.selected_tower;

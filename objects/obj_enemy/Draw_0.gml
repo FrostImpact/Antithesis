@@ -1,14 +1,8 @@
 var visual_scale=obj_camera.zoom;
-draw_set_alpha(0.16);
-draw_set_colour(make_colour_rgb(76,80,82));
-draw_ellipse(x-20*visual_scale,y-7*visual_scale,x+23*visual_scale,y+10*visual_scale,false);
 draw_set_alpha(1);
-var flash=hit_flash/0.15;
-// A small contact squash is visual only; path position and hit testing stay fixed.
-block(x,y+(-5+sin(elapsed*7)*3)*visual_scale,13*(1+flash*0.08)*visual_scale,7*visual_scale,25*(1-flash*0.1)*visual_scale,
-    merge_colour(make_colour_rgb(131,137,137),c_white,flash),
-    merge_colour(make_colour_rgb(66,75,73),c_white,flash),
-    merge_colour(make_colour_rgb(101,112,107),c_white,flash));
+blank_draw_spawn_fx(id);
+blank_draw_model(id);
+blank_draw_shock_fx(id);
 
 // LOCK is shown in-world with two clean chains from the ground to the body.
 if(lock_visual>0.01) {

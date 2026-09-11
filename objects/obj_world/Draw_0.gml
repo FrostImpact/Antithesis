@@ -141,6 +141,8 @@ for(var void_index=0;void_index<array_length(void_regions);++void_index) {
     var hx1=region[0]; var hy1=region[1]; var hx2=region[2]; var hy2=region[3];
     var rim_points=[[hx1-0.14,hy1-0.14],[hx2+0.14,hy1-0.14],[hx2+0.14,hy2+0.14],[hx1-0.14,hy2+0.14]];
     var hole_points=[[hx1,hy1],[hx2,hy1],[hx2,hy2],[hx1,hy2]];
+    var aperture=[];
+    for(var corner=0;corner<4;++corner) array_push(aperture,[project_x(hole_points[corner][0],hole_points[corner][1]),project_y(hole_points[corner][0],hole_points[corner][1])]);
     draw_set_alpha(1);
     draw_set_colour(make_colour_rgb(92,96,96));
     draw_primitive_begin(pr_trianglefan);
@@ -160,10 +162,7 @@ for(var void_index=0;void_index<array_length(void_regions);++void_index) {
         var bx=project_x(edge_b[0],edge_b[1]); var by=project_y(edge_b[0],edge_b[1]);
         var inner_depth=31*obj_camera.zoom;
         draw_set_colour(edge==0 ? make_colour_rgb(153,156,154) : make_colour_rgb(126,130,129));
-        draw_primitive_begin(pr_trianglefan);
-        draw_vertex(ax,ay); draw_vertex(bx,by);
-        draw_vertex(bx,by+inner_depth); draw_vertex(ax,ay+inner_depth);
-        draw_primitive_end();
+        map_draw_polygon(map_clip_polygon([[ax,ay],[bx,by],[bx,by+inner_depth],[ax,ay+inner_depth]],aperture));
     }
 }
 
@@ -186,6 +185,14 @@ for(var i=0;i<array_length(route);++i) {
         draw_line(path_ax,path_ay-2*obj_camera.zoom,path_bx,path_by-2*obj_camera.zoom);
     }
 }
+
+// Low colour-coded endpoint platforms sit over the route and behind actors.
+map_draw_spawn_platform(route,elapsed);
+map_draw_base_platform(route,elapsed);
+
+// Grounded shadows are drawn once, beneath every actor (including hover glows).
+for(var tower_index=0;tower_index<instance_number(obj_tower);++tower_index)
+    tower_draw_shadow(instance_find(obj_tower,tower_index));
 
 draw_set_alpha(1);
 ui_draw_world_feedback();

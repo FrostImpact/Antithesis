@@ -33,7 +33,6 @@ function defender_muzzle(_x,_y,_angle,_time,_kick,_aim,_charge=0,_recovery=0,_vi
     return defender_point(_x,_y,36,pose.hy+dcos(pose.pitch)*34-dsin(pose.pitch)*10,pose.hz+dsin(pose.pitch)*34+dcos(pose.pitch)*10,_angle,_visual_scale);
 }
 function draw_defender(_x,_y,_angle,_time,_kick,_aim,_charge=0,_recovery=0,_visual_scale=1) {
-    var alpha=draw_get_alpha();
     var pose=defender_pose(_time,_kick,_aim,_charge,_recovery);
     var bob=pose.bob;
     var sway=pose.sway;
@@ -42,9 +41,6 @@ function draw_defender(_x,_y,_angle,_time,_kick,_aim,_charge=0,_recovery=0,_visu
     var edge=make_colour_rgb(235,232,225);
     var skin=make_colour_rgb(61,81,92);
     var cyan=make_colour_rgb(85,174,185);
-    draw_set_alpha(alpha*0.22);
-    diamond(_x+3,_y+2,15,5,dark);
-    draw_set_alpha(alpha);
     // Broad chest, layered sleeves, belt pouches, knee plates and heavy boots.
     var parts=[
         [-13-sway*0.16,10,6,15,20,12,dark],[13+sway*0.16,-7,6,15,20,12,dark],
@@ -228,7 +224,7 @@ function draw_defender(_x,_y,_angle,_time,_kick,_aim,_charge=0,_recovery=0,_visu
 // WANDERER follows the supplied sculpt: ivory beaked hood, torn mantle,
 // faceless lime slit, asymmetric prosthetic shin and a supported sniper rifle.
 function wanderer_pose(_time,_kick,_aim,_charge,_recovery) {
-    var aim=clamp(_aim+_charge,0,1);
+    var aim=clamp(_aim,0,1);
     aim=aim*aim*(3-2*aim);
     var bob=sin(_time*1.7)*0.7-25*(1-aim)-_charge*5-_kick*0.18;
     return {bob:bob,

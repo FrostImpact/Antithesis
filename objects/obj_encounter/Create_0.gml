@@ -1,1 +1,1 @@
-countdown=obj_game.encounter_settings.initial_delay;
+encounter_initialize();

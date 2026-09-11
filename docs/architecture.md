@@ -11,14 +11,18 @@ Managers are created before actors. Tower instances hold independent state; shar
 | obj_camera | Smoothed zoom and world-to-screen synchronization |
 | obj_combat | Advances every tower through the shared controller |
 | obj_ui | Modular dossier, wrapped catalog copy, generated glossary regions, selection feedback, cursor and presentation clock |
-| obj_encounter | Automatic regular encounters using shared settings; GUI can add heavy enemies |
-| obj_world | Irregular floating landmass, path, surface faults and aerial reality tears |
+| obj_encounter | Player-started rounds, staggered waves, clear detection, wave breaks and escape counts |
+| obj_world | Irregular floating landmass, path, colour-coded endpoint platforms and aerial reality tears |
 | obj_placement | Initial placement and relocation preview, shared footprint validation, confirmation and cancellation |
 | obj_tower | Per-instance combat state, configured model, beam and charge bar |
-| obj_enemy | Movement, health, slow stacks and Lock timers |
+| obj_enemy | Movement, health, slow stacks, Lock timers, heading and shared walk phase |
 | obj_map_route / surface / void / terrain | Room Editor authoring markers consumed by obj_world at startup |
 
 ## Shared scripts
+
+- `scr_encounters`: preparation / wave / wave_break / intermission state machine. Each round creates three wave records containing an enemy roster, spawn interval and health multiplier. Starting a round requires a tower and rejects pause or duplicate starts. Future card drafts can be inserted at the intermission boundary.
+- `scr_blanks`: constant-cost sprite selection and drawing. Three assets are bound once after catalog creation. Each enemy selects one of 48 hover frames and anchors its baked ground shadow at the route position. No geometry, skeleton or facing calculations run during drawing. A hit briefly adds a second sprite submission.
+- `tools/bake-blanks.cjs`: offline rasterizer for the void-fragment sculpts in `tools/blank-models.cjs`. It writes 48 hover frames per type to native GameMaker PNG assets, including editor layers. Drift uses a slow clock affected by slow, root and pause. Re-bake after changing geometry; the game does not bake at startup.
 
 - `scr_enums`: shared UI, ability, targeting, charge-state and map-region identifiers.
 - `scr_definitions`: configuration and catalogs. Tower records provide stats, wrapped UI copy, model/muzzle functions and status-effect settings.
@@ -59,8 +63,12 @@ Targeting uses world distance and a shared priority rule. A damped angular sprin
 
 ## Current boundaries and verification
 
-The prototype retains one placement and automatically spawns regular enemies when the route is empty. The GUI can spawn additional heavy enemies with three times the HP and half the speed. Its controller supports multiple independent towers, but a build menu, economy, upgrades and card drafts are not implemented. A spatial target index can later replace the straightforward scan inside `tower_find_target()`.
+The prototype supports repeated tower placement and player-started rounds with three staggered waves, short wave breaks, an intermission and increasing difficulty. The three ordinary Blank variants are suspended void fragments, each rendered from a 48-frame sprite atlas with independently hinged plates and randomized initial phases. They finish materializing before movement and targeting begin. Electric Slow feedback and Lock chains are independent of the baked motion. Tower shadows render once in the world ground pass, independently of model animation and hover tint. Enemy escapes are counted without a base-health penalty; victory and defeat are not yet implemented. A build menu, economy, upgrades and card drafts are also not implemented. A spatial target index can later replace the straightforward scan inside `tower_find_target()`.
 
-`tests/controllers.cjs` translates production control functions and stubs engine operations to test state and input rules. It does not replace in-game testing. Local builds and isolated runtime-test copies are in the ignored `.build` directory.
+`scr_loadout` owns the shuffled card deck, stored-card counts, pending card-use transaction, five hotbar slots, available tower copies and Bits. Using a card reserves one stored copy and commits its reward once the paused-aware animation completes. Placement revalidates terrain, inventory and funds before creating a tower and deducts payment only on success. The five-slot limit applies to equipped types, not deployed towers. The encounter manager deposits one reward per completed round, guarded by round number. Combat deposits kill Bits. UI drawing and input share slot rectangles and inverse-rotated card geometry.
+
+The dossier sits above the hotbar and to the right of the card inspector. Card controls draw above the dossier, keeping use animations visible. Pit walls use convex clipping against the projected opening; footprint validation subtracts the union of shelf rectangles and rejects expanded void bounds including the rim.
+
+`tests/controllers.cjs`, `tests/loadout.cjs` and `tests/map-collision.cjs` translate production control functions and stub engine operations to test state, input and geometry rules. They do not replace in-game testing. `tests/render-loadout.cjs` renders the production map and HUD using the actual tower model functions. Local builds and isolated runtime-test copies are in the ignored `.build` directory.
 
 

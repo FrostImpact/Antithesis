@@ -8,5 +8,7 @@ display_set_gui_size(config.gui_width,config.gui_height);
 
 build_tower_type="vestral";
 enemy_catalog=build_enemy_catalog();
-encounter_settings={spawn_delay:2.5,initial_delay:1};
+blank_initialize_catalog();
+encounter_settings={wave_break:4};
+loadout_initialize();
 

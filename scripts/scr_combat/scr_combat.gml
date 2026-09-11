@@ -64,7 +64,7 @@ if(move_active) { tower_tick_move(id,dt); return; }
 if(relocating) return;
 idle_time+=dt;
 beam=max(0,beam-dt);
-recoil*=exp(-14*dt);
+recoil*=exp(-(definition.key=="wanderer" ? 8 : 14)*dt);
 settle=max(0,settle-dt*2);
 finisher_flash=max(0,finisher_flash-dt);
 charge_lockout=max(0,charge_lockout-dt);
@@ -91,7 +91,7 @@ charge_pose=lerp(charge_pose,charging ? 1 : 0,1-exp(-9*dt));
 // target was already present. Targetless charges still acquire normally later.
 var aim_goal=tracking && charge_mode!=TowerChargeState.Recovery ? 1 : 0;
 if(definition.key=="wanderer") aim_goal=charging || finisher_flash>0 ? 1 : 0;
-aim_blend=lerp(aim_blend,aim_goal,1-exp(-7*dt));
+aim_blend=lerp(aim_blend,aim_goal,1-exp(-(definition.key=="wanderer" ? (aim_goal>0 ? 3.5 : 2.8) : 7)*dt));
 
 if(charging) {
     if(definition.key=="wanderer") {
@@ -99,7 +99,7 @@ if(charging) {
         if(charge_left<=0) {
             charge_mode=TowerChargeState.Ready;
             charge_lockout=charge_reuse_delay;
-            wanderer_skill_attack(id,true);
+            wanderer_skill_attack(id);
         }
         return;
     }
@@ -161,7 +161,7 @@ function tower_find_target(_tower,_unlimited=false) {
     for(var i=0;i<instance_number(obj_enemy);++i) {
         var enemy=instance_find(obj_enemy,i);
         var distance=point_distance(_tower.world_x,_tower.world_y,enemy.world_x,enemy.world_y);
-        if((!_unlimited && distance>_tower.attack_range) || enemy.hit_points<=0) continue;
+        if(enemy.spawn_left>0 || (!_unlimited && distance>_tower.attack_range) || enemy.hit_points<=0) continue;
         var value=enemy.progress;
         if(_tower.target_mode==TowerTargetMode.Strongest) value=enemy.hit_points;
         if(_tower.target_mode==TowerTargetMode.Nearest) value=-distance;
@@ -234,7 +234,7 @@ function tower_fire_hit(_tower,_target) {
     _tower.beam=_tower.shot_fx_duration;
     _tower.beam_world_x=_target.world_x; _tower.beam_world_y=_target.world_y;
     _tower.beam_x=_target.x; _tower.beam_y=_target.y-20;
-    _tower.recoil=_tower.definition.key=="wanderer" ? 19 : 11;
+    _tower.recoil=_tower.definition.key=="wanderer" ? 29 : 11;
     if(_tower.definition.key=="wanderer") _tower.finisher_flash=0.65;
     var dealt=_tower.damage*_tower.definition.hit_multiplier;
     if(_tower.definition.key=="wanderer" && _target.hit_points*200<_target.max_hit_points*7) dealt=_target.hit_points;
@@ -251,28 +251,40 @@ function tower_fire_hit(_tower,_target) {
         }
     } else enemy_apply_shock(_target,_tower.definition);
     if(_tower.definition.key!="wanderer") instance_create_depth(_target.x,_target.y-20,-10000,obj_impact,{effect_kind:_target.hit_points<=0 ? "kill" : "hit",burst:_target.hit_points<=0,world_x:_target.world_x,world_y:_target.world_y});
+    combat_text(_target,string_format(dealt,1,dealt==floor(dealt) ? 0 : 1),false,_tower.hits_landed mod 3);
     if(_target.hit_points<=0) {
         _tower.kills+=1;
+        loadout_award_kill();
         if(_tower.definition.key=="wanderer") {
             var stacks=clamp(ceil(dealt/_tower.definition.vigil_damage_step),1,4);
             var full=min(stacks,max(0,_tower.definition.vigil_breakpoint-_tower.vigil_earned));
             _tower.vigil+=stacks;
             _tower.vigil_earned+=stacks;
             _tower.damage+=full*_tower.definition.vigil_attack+(stacks-full)*_tower.definition.vigil_attack_reduced;
-            _tower.charge_lockout=0;
+            _tower.charge_lockout*=1-_tower.definition.kill_cooldown_reduction;
+            instance_create_depth(_tower.x,_tower.y,-10002,obj_impact,{effect_kind:"vigil",burst:false,
+                world_x:_tower.world_x,world_y:_tower.world_y,popup_stacks:stacks});
         }
         instance_destroy(_target);
     }
     return true;
 }
+// Independent text instances survive a lethal hit; status labels share this path.
+function combat_text(_enemy,_text,_status,_lane=0) {
+    instance_create_depth(_enemy.x,_enemy.y,-10001,obj_impact,{effect_kind:"text",burst:false,
+        world_x:_enemy.world_x,world_y:_enemy.world_y,popup_text:_text,popup_status:_status,popup_lane:_lane});
+}
 function enemy_apply_shock(_enemy,_definition) {
     var previous=_enemy.shock_stacks;
+    if(previous==0) combat_text(_enemy,"Slow",true,0);
     _enemy.shock_stacks=min(previous+1,_definition.shock_max_stacks);
     _enemy.shock_left=_definition.shock_duration;
     _enemy.shock_slow=min(0.4,_enemy.shock_stacks*_definition.shock_per_stack);
     // Lock triggers on reaching the cap, not on every refresh at the cap.
-    if(previous<_definition.shock_max_stacks && _enemy.shock_stacks==_definition.shock_max_stacks)
+    if(previous<_definition.shock_max_stacks && _enemy.shock_stacks==_definition.shock_max_stacks) {
         _enemy.lock_left=max(_enemy.lock_left,_definition.lock_duration);
+        combat_text(_enemy,"Lock",true,0);
+    }
 }
 function enemy_movement_time(_enemy,_dt) {
     var locked=min(_dt,_enemy.lock_left);
@@ -280,7 +292,8 @@ function enemy_movement_time(_enemy,_dt) {
     var movement=(_dt-locked)-slowed*_enemy.shock_slow;
     _enemy.lock_left=max(0,_enemy.lock_left-_dt);
     _enemy.shock_left=max(0,_enemy.shock_left-_dt);
-    if(_enemy.shock_left<=0) { _enemy.shock_stacks=0; _enemy.shock_slow=0; }
+    // Floating-point subtraction must not leave expired stacks alive for a frame.
+    if(_enemy.shock_left<=0.000001) { _enemy.shock_left=0; _enemy.shock_stacks=0; _enemy.shock_slow=0; }
     return movement;
 }
 function tower_charge_progress(_tower) {
@@ -333,13 +346,11 @@ function tower_tick_move(_tower,_dt) {
         _tower.relocating=false;
         _tower.settle=0.55;
         _tower.select_pulse=1;
-        if(_tower.definition.key=="wanderer") wanderer_skill_attack(_tower,false);
     }
 }
 
-function wanderer_skill_attack(_tower,_unlimited) {
-    _tower.vigil=max(0,_tower.vigil-1);
-    var target=tower_find_target(_tower,_unlimited);
+function wanderer_skill_attack(_tower) {
+    var target=tower_find_target(_tower,true);
     if(!instance_exists(target)) return false;
     _tower.facing=point_direction(0,0,target.x-_tower.x,(target.y-_tower.y)*2);
     _tower.turn_velocity=0;
@@ -385,8 +396,8 @@ function tower_request_move(_tower) {
     return true;
 }
 function tower_cancel_move() {
-    if(!instance_exists(obj_placement) || !instance_exists(obj_placement.moving_tower)) return false;
-    obj_placement.moving_tower.relocating=false;
+    if(!instance_exists(obj_placement)) return false;
+    if(instance_exists(obj_placement.moving_tower)) obj_placement.moving_tower.relocating=false;
     instance_destroy(obj_placement);
     return true;
 }

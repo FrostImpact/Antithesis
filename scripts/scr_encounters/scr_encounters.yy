@@ -1,0 +1,1 @@
+{"$GMScript":"v1","%Name":"scr_encounters","isCompatibility":false,"isDnD":false,"name":"scr_encounters","parent":{"name":"Combat","path":"folders/Scripts/Combat.yy"},"resourceType":"GMScript","resourceVersion":"2.0"}

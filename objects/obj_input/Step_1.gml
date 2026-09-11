@@ -46,7 +46,7 @@ if(instance_exists(obj_placement) && instance_exists(obj_placement.moving_tower)
 }
 if(instance_exists(clicked_tower)) game_select_tower(clicked_tower);
 else if(clicked_ground && !instance_exists(obj_placement)) game_select_tower(noone);
-if(keyboard_check_pressed(vk_escape)) { if(!tower_cancel_move()) game_select_tower(noone); }
+if(keyboard_check_pressed(vk_escape)) { obj_game.loadout.selected=-1; if(!tower_cancel_move()) game_select_tower(noone); }
 if(mouse_check_button_pressed(mb_right)) tower_cancel_move();
 if(keyboard_check_pressed(obj_game.config.restart_key)) { room_restart(); exit; }
 if(keyboard_check_pressed(obj_game.config.pause_key)) obj_game.paused=!obj_game.paused;
@@ -54,10 +54,5 @@ if(keyboard_check_pressed(obj_game.config.charge_key)) tower_request_charge(obj_
 ui_handle_input();
 
 
-// Number keys select a fresh tower without interrupting a relocation.
-if(!obj_game.paused && !(instance_exists(obj_placement) && instance_exists(obj_placement.moving_tower))) {
-    if(keyboard_check_pressed(ord("1")) || keyboard_check_pressed(ord("2"))) {
-        obj_game.build_tower_type=keyboard_check_pressed(ord("2")) ? "wanderer" : "vestral";
-        if(!instance_exists(obj_placement)) instance_create_depth(0,0,0,obj_placement);
-    }
-}
+// Only equipped, owned copies can start a placement preview.
+for(var slot=0;slot<5;++slot) if(keyboard_check_pressed(ord("1")+slot)) loadout_select(slot);
