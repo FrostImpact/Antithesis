@@ -9,7 +9,10 @@ var route=obj_world.route;
 // Finish materializing at the entrance before joining the route or taking hits.
 var active_dt=max(0,dt-spawn_left);
 spawn_left=max(0,spawn_left-dt);
+var walking_dt=enemy_definition.model=="lancer" ? enemy_tick_laser(id,active_dt) : active_dt;
+// Debuffs still expire while the laser holds the enemy stationary.
 var movement_dt=enemy_movement_time(id,active_dt);
+if(walking_dt<=0) movement_dt=0;
 progress=min(progress+enemy_definition.move_speed*movement_dt,array_length(route)-1);
 var segment=min(floor(progress),array_length(route)-2);
 var fraction=progress-segment;

@@ -1,12 +1,12 @@
 panel_left=300;
-panel_top=250;
+panel_top=316;
 panel_blend=0;
 ui_time=0;
 active_cursor=cr_default;
-spawn_left=30;
-spawn_top=60;
+spawn_left=24;
+spawn_top=24;
 spawn_width=214;
-spawn_height=42;
+spawn_height=56;
 
 panel_open=0;
 panel_velocity=0;

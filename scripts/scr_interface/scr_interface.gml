@@ -4,11 +4,20 @@ function ui_panel_y() {
     return obj_ui.panel_top+(1-clamp(obj_ui.panel_open,0,1))*16;
 }
 
+// One continuous lime / amber / red ramp for every health display.
+function ui_health_colour(_ratio) {
+    var ratio=clamp(_ratio,0,1);
+    var red=make_colour_rgb(236,82,78);
+    var amber=make_colour_rgb(235,189,78);
+    var lime=make_colour_rgb(186,235,83);
+    return ratio<0.5 ? merge_colour(red,amber,ratio*2) : merge_colour(amber,lime,(ratio-0.5)*2);
+}
+
 function ui_control_rect(_control) {
     switch(_control) {
-        case UiAction.Target: return [14,212,190,246];
+        case UiAction.Target: return [0,212,190,246];
         case UiAction.Charge: return [200,212,360,246];
-        case UiAction.Move: return [14,256,360,290];
+        case UiAction.Move: return [0,256,360,290];
         case UiAction.AbilityDoubleTap: return [380,0,590,34];
         case UiAction.AbilityShockBolts: return [380,44,590,78];
         case UiAction.AbilityOverloaded: return [380,88,590,122];
@@ -32,7 +41,7 @@ function ui_pointer_blocked() {
     if(loadout_pointer_blocked()) return true;
     if(ui_spawn_hovered()) return true;
     var pointer_x=device_mouse_x_to_gui(0); var pointer_y=device_mouse_y_to_gui(0);
-    if(obj_ui.tooltip_blend>0.01 && ui_point_in_local_rect(pointer_x,pointer_y,obj_ui.tooltip_rect)) return true;
+    if(obj_ui.tooltip_rect[2]>obj_ui.tooltip_rect[0] && ui_point_in_local_rect(pointer_x,pointer_y,obj_ui.tooltip_rect)) return true;
     if(!instance_exists(obj_game.selected_tower)) return false;
     var mx=pointer_x-obj_ui.panel_left;
     var my=pointer_y-ui_panel_y();
@@ -161,8 +170,9 @@ function ui_stat_breakdown(_tower,_stat) {
         if(d.key=="vestral") body+="\nDouble Tap: 2 hits x 50% = "+string(_tower.damage*0.5)+" per hit.";
         return {title:"ATTACK DAMAGE",body:body};
     }
-    if(_stat==1) return {title:"ATTACK RATE",body:"Base: "+string_format(1/d.attack_interval,1,2)+" attacks/s\nSpeed adjustment: "+string_format((d.attack_interval/_tower.attack_interval-1)*100,1,1)+"%\nTotal: 1 / "+string_format(_tower.attack_interval,1,2)+"s = "+string_format(1/_tower.attack_interval,1,2)+" attacks/s"+(d.key=="wanderer" ? "\nVigil disables automatic attacks. Skills fire once." : "\nDowntime starts after the second hit.")};
+    if(_stat==1) return {title:"ATTACK RATE",body:"Base: "+string_format(1/d.attack_interval,1,2)+" attacks/s\nSpeed adjustment: "+string_format((d.attack_interval/_tower.attack_interval-1)*100,1,1)+"%\nTotal: 1 / "+string_format(_tower.attack_interval,1,2)+"s = "+string_format(1/_tower.attack_interval,1,2)+" attacks/s"+(d.key=="wanderer" ? "\nVigil disables automatic attacks. Skills fire once." : (d.key=="triage" ? "\nOne dart per attack." : "\nDowntime starts after the second hit."))};
     if(_stat==2) return {title:"ATTACK RANGE",body:"Base: "+string(d.attack_range)+"\nAdjustments: "+string(_tower.attack_range-d.attack_range)+"\nTotal: "+string(_tower.attack_range)+(d.key=="wanderer" ? "\nExecution ignores range." : "")};
+    if(_stat==4) return {title:"MOVEMENT SPEED",body:"Base: "+string(d.move_speed)+" tiles/s\nAdjustments: "+string(_tower.move_speed-d.move_speed)+" tiles/s\nTotal: "+string(_tower.move_speed)+" tiles/s\nTravel time = distance / MVE SPD.\nAverage speed across the eased dash.\nCombat timers pause until arrival."};
     return {title:"CHARGE TIME",body:"Base: "+string(d.charge_duration)+"s\nAdjustments: "+string(_tower.charge_duration-d.charge_duration)+"s\nTotal: "+string(_tower.charge_duration)+"s\nSkill cooldown: "+string(d.charge_reuse_delay)+"s base + "+string(_tower.charge_reuse_delay-d.charge_reuse_delay)+"s adjustment = "+string(_tower.charge_reuse_delay)+"s"};
 }
 
@@ -210,12 +220,22 @@ function ui_draw_button(_control,_label,_enabled,_active=false) {
     if(_active) base=merge_colour(base,theme.surface_active,0.8);
     draw_set_colour(base);
     draw_rectangle(px+r[0]+inset,py+r[1]+inset,px+r[2]-inset,py+r[3]-inset,false);
-    draw_set_colour(merge_colour(theme.border,theme.title,_active ? 0.4 : hover*0.28));
+    draw_set_colour(_active ? theme.accent : merge_colour(theme.border,theme.muted,hover*0.28));
     draw_rectangle(px+r[0]+inset,py+r[1]+inset,px+r[2]-inset,py+r[3]-inset,true);
     draw_set_colour(_enabled ? theme.title : theme.disabled);
     draw_set_halign(fa_center); draw_set_valign(fa_middle);
     draw_text(px+(r[0]+r[2])/2,py+(r[1]+r[3])/2+press,_label);
     draw_set_halign(fa_left); draw_set_valign(fa_top);
+}
+
+function ui_draw_surface(_left,_top,_right,_bottom) {
+    var theme=obj_game.ui_theme;
+    draw_set_colour(theme.shadow);
+    draw_rectangle(_left+2,_top+3,_right+2,_bottom+3,false);
+    draw_set_colour(theme.surface);
+    draw_rectangle(_left,_top,_right,_bottom,false);
+    draw_set_colour(theme.border);
+    draw_rectangle(_left,_top,_right,_bottom,true);
 }
 
 function ui_draw_world_feedback() {

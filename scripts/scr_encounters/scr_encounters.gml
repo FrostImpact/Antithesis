@@ -25,6 +25,7 @@ function encounter_build_round(_round) {
             if(wave==1) kind=slot mod 3==0 ? "intrusion" : "fast";
             if(wave==2) kind=slot mod 4==0 ? "heavy" : (slot mod 2==0 ? "fast" : "intrusion");
             if(_round>=3 && wave==0 && slot mod 5==4) kind="heavy";
+            if((wave==2 || (_round>=2 && wave==1)) && slot mod 6==5) kind="lancer";
             array_push(roster,kind);
         }
         array_push(result,{enemies:roster,interval:max(0.45,1.3-wave*0.15-min(0.5,(_round-1)*0.04)),
@@ -34,7 +35,7 @@ function encounter_build_round(_round) {
 }
 
 function encounter_start_round() {
-    if(obj_game.paused || !instance_exists(obj_tower)) return false;
+    if(obj_game.paused || loadout_reward_active() || !instance_exists(obj_tower)) return false;
     if(obj_encounter.phase!="preparation" && obj_encounter.phase!="intermission") return false;
     obj_encounter.round_number+=1;
     obj_encounter.waves=encounter_build_round(obj_encounter.round_number);

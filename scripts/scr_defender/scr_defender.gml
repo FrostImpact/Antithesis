@@ -436,3 +436,59 @@ function wanderer_limb(_faces,_a,_b,_width,_colour,_x,_y,_angle,_scale) {
             merge_colour(_colour,c_black,(i mod 3)*0.12),_x,_y,_angle,_scale);
     }
 }
+function triage_muzzle(_x,_y,_angle,_time,_kick,_aim,_charge=0,_recovery=0,_visual_scale=1) {
+    return wanderer_point(_x,_y,21,42-_kick*0.3,48+_aim*15+sin(_time*2),_angle,_visual_scale);
+}
+function triage_box(_faces,_u,_v,_z,_w,_d,_h,_colour,_x,_y,_angle,_scale) {
+    var p=[[_u-_w,_v-_d,_z],[_u+_w,_v-_d,_z],[_u+_w,_v+_d,_z],[_u-_w,_v+_d,_z],
+        [_u-_w,_v-_d,_z+_h],[_u+_w,_v-_d,_z+_h],[_u+_w,_v+_d,_z+_h],[_u-_w,_v+_d,_z+_h]];
+    var ids=[[0,3,2,1],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7],[4,5,6,7]];
+    for(var i=0;i<6;++i) {var f=ids[i];wanderer_mesh_face(_faces,[p[f[0]],p[f[1]],p[f[2]],p[f[3]]],merge_colour(_colour,c_black,(i mod 3)*0.13),_x,_y,_angle,_scale);}
+}
+function draw_triage(_x,_y,_angle,_time,_kick,_aim,_charge=0,_recovery=0,_visual_scale=1) {
+    var faces=[];var bob=sin(_time*2)-_charge*3;
+    var coat=make_colour_rgb(221,219,213);var shade=make_colour_rgb(167,167,165);
+    var dark=make_colour_rgb(45,48,52);var leather=make_colour_rgb(99,78,61);var cyan=make_colour_rgb(91,221,227);
+    // Stocky field medic: dark boots, split coat and large strapped medical pack.
+    triage_box(faces,-11,3,-12,7,11,10,shade,_x,_y,_angle,_visual_scale);
+    triage_box(faces,12,0,-12,7,11,10,shade,_x,_y,_angle,_visual_scale);
+    wanderer_limb(faces,[-11,0,-3],[-10,-3,35+bob],12,dark,_x,_y,_angle,_visual_scale);
+    wanderer_limb(faces,[12,-3,-3],[9,0,35+bob],12,dark,_x,_y,_angle,_visual_scale);
+    triage_box(faces,0,0,27+bob,18,10,39,dark,_x,_y,_angle,_visual_scale);
+    triage_box(faces,0,-19,30+bob,23,11,43,leather,_x,_y,_angle,_visual_scale);
+    triage_box(faces,0,-19,73+bob,22,10,7,shade,_x,_y,_angle,_visual_scale);
+    for(var side=-1;side<=1;side+=2) {
+        triage_box(faces,side*25,-18,34+bob,6,8,16,leather,_x,_y,_angle,_visual_scale);
+        triage_box(faces,side*12,-30,30+bob,2,1,49,dark,_x,_y,_angle,_visual_scale);
+        var sway=sin(_time*2+side)*3;
+        wanderer_mesh_face(faces,[[side*6,12,66+bob],[side*23,5,65+bob],[side*27,8+sway,6+bob],[side*10,15,13+bob]],coat,_x,_y,_angle,_visual_scale);
+        wanderer_mesh_face(faces,[[side*23,5,65+bob],[side*20,-11,61+bob],[side*23,-15+sway,10+bob],[side*27,8+sway,6+bob]],shade,_x,_y,_angle,_visual_scale);
+        wanderer_limb(faces,[side*19,0,64+bob],[side*29,7,44+bob],17,coat,_x,_y,_angle,_visual_scale);
+        wanderer_limb(faces,[side*29,7,44+bob],[side*23,21,44+_aim*15+bob],11,shade,_x,_y,_angle,_visual_scale);
+        triage_box(faces,side*23,22,41+_aim*15+bob,5,5,8,dark,_x,_y,_angle,_visual_scale);
+        // Broad diagonal brown harness across the ivory coat.
+        wanderer_mesh_face(faces,[[side*14,14,66+bob],[side*19,14,65+bob],[side*4,17,34+bob],[side*0,17,36+bob]],leather,_x,_y,_angle,_visual_scale);
+        triage_box(faces,side*14,16,27+bob,6,4,12,leather,_x,_y,_angle,_visual_scale);
+    }
+    // Faceted white hood surrounds a recessed black mask and one circular lens.
+    var top=[0,-2,98+bob],left=[-20,10,83+bob],right=[20,10,83+bob],chin=[0,20,66+bob],rear=[0,-19,78+bob];
+    wanderer_mesh_face(faces,[top,left,chin],coat,_x,_y,_angle,_visual_scale);
+    wanderer_mesh_face(faces,[top,chin,right],shade,_x,_y,_angle,_visual_scale);
+    wanderer_mesh_face(faces,[top,rear,left],shade,_x,_y,_angle,_visual_scale);
+    wanderer_mesh_face(faces,[top,right,rear],coat,_x,_y,_angle,_visual_scale);
+    wanderer_mesh_face(faces,[[-12,18,86+bob],[9,18,85+bob],[12,22,73+bob],[-9,22,70+bob]],dark,_x,_y,_angle,_visual_scale);
+    var lens=[];
+    for(var i=0;i<10;++i) array_push(lens,[-2+dcos(i*36)*5,23,78+bob+dsin(i*36)*6]);
+    wanderer_mesh_face(faces,lens,cyan,_x,_y,_angle,_visual_scale);
+    // Cyan medical cross on the left sleeve; compact dart applicator in right hand.
+    triage_box(faces,-29,11,54+bob,2,1,12,cyan,_x,_y,_angle,_visual_scale);
+    triage_box(faces,-29,12,58+bob,6,1,4,cyan,_x,_y,_angle,_visual_scale);
+    triage_box(faces,21,30-_kick*0.3,46+_aim*15+bob,4,12,5,shade,_x,_y,_angle,_visual_scale);
+    triage_box(faces,21,35-_kick*0.3,48+_aim*15+bob,2,7,3,cyan,_x,_y,_angle,_visual_scale);
+    array_sort(faces,function(_a,_b){return sign(_a.sort_depth-_b.sort_depth);});
+    for(var f=0;f<array_length(faces);++f) {
+        var face=faces[f];draw_set_colour(face.colour);draw_primitive_begin(pr_trianglefan);
+        for(var k=0;k<array_length(face.points);++k) draw_vertex(face.points[k][0],face.points[k][1]);
+        draw_primitive_end();
+    }
+}

@@ -1,7 +1,53 @@
+function tower_heal(_tower,_amount) {
+    if(!instance_exists(_tower) || _tower.hit_points<=0) return;
+    var healed=min(_amount,_tower.max_hit_points-_tower.hit_points);
+    _tower.hit_points+=healed;
+    if(healed>0) combat_text(_tower,"+"+string_format(healed,1,1),true);
+}
+function triage_resuscitate(_tower) {
+    for(var i=0;i<instance_number(obj_enemy);++i) {
+        var enemy=instance_find(obj_enemy,i);
+        if(point_distance(_tower.world_x,_tower.world_y,enemy.world_x,enemy.world_y)<=_tower.attack_range) enemy.tourniquet_heal=0;
+    }
+    for(var i=0;i<instance_number(obj_tower);++i) {
+        var ally=instance_find(obj_tower,i);
+        ally.shield_hp=max(ally.shield_hp,ally.max_hit_points*0.3);
+    }
+}
+function triage_tick_support(_dt) {
+    if(obj_game.paused || _dt<=0) return;
+    for(var i=0;i<instance_number(obj_tower);++i) {
+        var tower=instance_find(obj_tower,i);
+        tower.shield_hp=max(0,tower.shield_hp-tower.max_hit_points*0.1*_dt);
+        if(tower.definition.key!="triage" || tower.kit_left<=0) continue;
+        for(var j=0;j<instance_number(obj_tower);++j) {
+            var ally=instance_find(obj_tower,j);
+            if(point_distance(tower.kit_x,tower.kit_y,ally.world_x,ally.world_y)>tower.definition.kit_radius) continue;
+            var healed=false;
+            for(var k=0;k<array_length(tower.kit_healed);++k) if(tower.kit_healed[k]==ally) healed=true;
+            if(!healed) { tower_heal(ally,tower.damage*1.2); array_push(tower.kit_healed,ally); }
+        }
+        tower.kit_left=max(0,tower.kit_left-_dt);
+    }
+}
+
 function tower_initialize() {
 definition=tower_definition(tower_type);
 attack_range=definition.attack_range;
 damage=definition.damage;
+max_hit_points=definition.max_hit_points;
+hit_points=max_hit_points;
+shield_hp=0;
+kit_left=0;
+kit_healed=[];
+kit_x=world_x;
+kit_y=world_y;
+display_hit_points=hit_points;
+charge_ready_blend=0;
+charge_ready_pulse=0;
+charge_was_ready=false;
+hit_flash=0;
+move_speed=definition.move_speed;
 vigil=0;
 vigil_earned=0;
 hits_landed=0;
@@ -10,7 +56,7 @@ ability_detail_open=false;
 relocating=false;
 move_active=false;
 move_elapsed=0;
-move_duration=0.32;
+move_duration=0;
 move_from_x=world_x; move_from_y=world_y;
 move_target_x=world_x; move_target_y=world_y;
 move_trail_x=array_create(7,world_x);
@@ -60,6 +106,14 @@ hover_amount=0; selection_amount=0; select_pulse=0; reject_pulse=0;
 function tower_tick() {
 var dt=min(delta_time/1000000,0.05);
 if(obj_game.paused) return;
+hit_flash=max(0,hit_flash-dt);
+display_hit_points=lerp(display_hit_points,hit_points,1-exp(-8*dt));
+if(abs(display_hit_points-hit_points)<0.01) display_hit_points=hit_points;
+var skill_ready=tower_can_charge(id);
+charge_ready_blend=lerp(charge_ready_blend,skill_ready ? 1 : 0,1-exp(-10*dt));
+charge_ready_pulse=max(0,charge_ready_pulse-dt*1.5);
+if(skill_ready && !charge_was_ready) charge_ready_pulse=1;
+charge_was_ready=skill_ready;
 if(move_active) { tower_tick_move(id,dt); return; }
 if(relocating) return;
 idle_time+=dt;
@@ -94,6 +148,11 @@ if(definition.key=="wanderer") aim_goal=charging || finisher_flash>0 ? 1 : 0;
 aim_blend=lerp(aim_blend,aim_goal,1-exp(-(definition.key=="wanderer" ? (aim_goal>0 ? 3.5 : 2.8) : 7)*dt));
 
 if(charging) {
+    if(definition.key=="triage") {
+        charge_left=max(0,charge_left-dt);
+        if(charge_left<=0) { triage_resuscitate(id); charge_mode=TowerChargeState.Ready; charge_lockout=charge_reuse_delay; }
+        return;
+    }
     if(definition.key=="wanderer") {
         charge_left=max(0,charge_left-dt);
         if(charge_left<=0) {
@@ -249,10 +308,15 @@ function tower_fire_hit(_tower,_target) {
             _tower.damage_dealt+=_target.hit_points;
             _target.hit_points=0;
         }
-    } else enemy_apply_shock(_target,_tower.definition);
+    } else if(_tower.definition.key=="vestral") enemy_apply_shock(_target,_tower.definition);
+    else if(_tower.definition.key=="triage" && _tower.hits_landed mod 3==0) {
+        _target.tourniquet_heal=_tower.damage*0.8;
+        combat_text(_target,"Tourniquet",true);
+    }
     if(_tower.definition.key!="wanderer") instance_create_depth(_target.x,_target.y-20,-10000,obj_impact,{effect_kind:_target.hit_points<=0 ? "kill" : "hit",burst:_target.hit_points<=0,world_x:_target.world_x,world_y:_target.world_y});
     combat_text(_target,string_format(dealt,1,dealt==floor(dealt) ? 0 : 1),false,_tower.hits_landed mod 3);
     if(_target.hit_points<=0) {
+        if(_target.tourniquet_heal>0) tower_heal(_tower,_target.tourniquet_heal);
         _tower.kills+=1;
         loadout_award_kill();
         if(_tower.definition.key=="wanderer") {
@@ -294,7 +358,7 @@ function enemy_movement_time(_enemy,_dt) {
     _enemy.shock_left=max(0,_enemy.shock_left-_dt);
     // Floating-point subtraction must not leave expired stacks alive for a frame.
     if(_enemy.shock_left<=0.000001) { _enemy.shock_left=0; _enemy.shock_stacks=0; _enemy.shock_slow=0; }
-    return movement;
+    return _enemy.tourniquet_heal>0 ? movement*0.75 : movement;
 }
 function tower_charge_progress(_tower) {
     if(_tower.charge_mode==TowerChargeState.Charging) return clamp(1-_tower.charge_left/_tower.charge_duration,0,1);
@@ -342,6 +406,10 @@ function tower_tick_move(_tower,_dt) {
         _tower.x=project_x(_tower.world_x,_tower.world_y);
         _tower.y=project_y(_tower.world_x,_tower.world_y);
         _tower.depth=-_tower.y;
+        if(_tower.definition.key=="triage") {
+            _tower.kit_x=_tower.move_from_x; _tower.kit_y=_tower.move_from_y;
+            _tower.kit_left=_tower.definition.kit_duration; _tower.kit_healed=[];
+        }
         _tower.move_active=false;
         _tower.relocating=false;
         _tower.settle=0.55;
@@ -403,6 +471,10 @@ function tower_cancel_move() {
 }
 function tower_commit_move(_tower,_wx,_wy) {
     if(!instance_exists(_tower) || !_tower.relocating || obj_game.paused || !placement_is_valid(_wx,_wy,_tower)) return false;
+    var distance=point_distance(_tower.world_x,_tower.world_y,_wx,_wy);
+    if(distance<0.01 || _tower.move_speed<=0) return false;
+    // MVE SPD is average world tiles per second, including the eased dash.
+    _tower.move_duration=distance/_tower.move_speed;
     _tower.move_from_x=_tower.world_x; _tower.move_from_y=_tower.world_y;
     _tower.move_target_x=_wx; _tower.move_target_y=_wy;
     _tower.move_elapsed=0;
@@ -412,4 +484,82 @@ function tower_commit_move(_tower,_wx,_wy) {
         _tower.move_trail_y[trail]=_tower.world_y;
     }
     return true;
+}
+
+function tower_take_damage(_tower,_amount) {
+    if(!instance_exists(_tower) || obj_game.paused || _amount<=0) return false;
+    var absorbed=min(_tower.shield_hp,_amount);
+    _tower.shield_hp-=absorbed;
+    var minimum=0;
+    for(var medic_index=0;medic_index<instance_number(obj_tower);++medic_index) {
+        var medic=instance_find(obj_tower,medic_index);
+        if(medic.definition.key=="triage" && medic.charge_mode==TowerChargeState.Charging &&
+            point_distance(medic.world_x,medic.world_y,_tower.world_x,_tower.world_y)<=medic.attack_range) minimum=1;
+    }
+    var dealt=min(max(0,_tower.hit_points-minimum),_amount-absorbed);
+    _tower.hit_points=max(minimum,_tower.hit_points-dealt);
+    _tower.hit_flash=0.3;
+    combat_text(_tower,"-"+string(dealt),false);
+    if(_tower.hit_points<=0) {
+        // Cancel only this tower's preview before its instance becomes invalid.
+        if(instance_exists(obj_placement) && obj_placement.moving_tower==_tower) tower_cancel_move();
+        if(obj_game.selected_tower==_tower) game_select_tower(noone);
+        if(obj_input.hovered_tower==_tower) obj_input.hovered_tower=noone;
+        loadout_notice(_tower.definition.name+" destroyed");
+        instance_destroy(_tower);
+    }
+    return true;
+}
+
+function enemy_laser_target(_enemy) {
+    var nearest=noone; var distance=_enemy.enemy_definition.laser_range;
+    for(var i=0;i<instance_number(obj_tower);++i) {
+        var tower=instance_find(obj_tower,i);
+        var candidate=point_distance(_enemy.world_x,_enemy.world_y,tower.world_x,tower.world_y);
+        if(tower.hit_points>0 && candidate<=distance) { nearest=tower; distance=candidate; }
+    }
+    return nearest;
+}
+
+// Returns the part of this frame spent walking. Aiming and firing stop the Lancer.
+function enemy_tick_laser(_enemy,_dt) {
+    if(obj_game.paused || _dt<=0) return 0;
+    var d=_enemy.enemy_definition;
+    if(_enemy.laser_state=="walking") {
+        _enemy.laser_clock=max(0,_enemy.laser_clock-_dt);
+        if(_enemy.laser_clock>0 || _enemy.lock_left>0) return _dt;
+        var target=enemy_laser_target(_enemy);
+        if(!instance_exists(target)) return _dt;
+        _enemy.laser_state="aiming";
+        _enemy.laser_clock=d.laser_windup;
+        _enemy.laser_target=target;
+        // Lock the location when the warning appears; relocation can evade it.
+        _enemy.laser_world_x=target.world_x;
+        _enemy.laser_world_y=target.world_y;
+        return 0;
+    }
+    // Lock interrupts a windup, giving Vestral a second way to counter the shot.
+    if(_enemy.laser_state=="aiming" && (!instance_exists(_enemy.laser_target) || _enemy.lock_left>0)) {
+        _enemy.laser_state="walking";
+        _enemy.laser_clock=d.laser_cooldown;
+        _enemy.laser_target=noone;
+        return _dt;
+    }
+    _enemy.laser_clock=max(0,_enemy.laser_clock-_dt);
+    if(_enemy.laser_clock>0) return 0;
+    if(_enemy.laser_state=="aiming") {
+        _enemy.laser_state="firing";
+        _enemy.laser_clock=d.laser_duration;
+        // Resolve once, against the marked area. Never apply damage each draw frame.
+        for(var i=instance_number(obj_tower)-1;i>=0;--i) {
+            var tower=instance_find(obj_tower,i);
+            if(point_distance(tower.world_x,tower.world_y,_enemy.laser_world_x,_enemy.laser_world_y)<=d.laser_radius)
+                tower_take_damage(tower,d.laser_damage);
+        }
+    } else {
+        _enemy.laser_state="walking";
+        _enemy.laser_clock=d.laser_cooldown;
+        _enemy.laser_target=noone;
+    }
+    return 0;
 }

@@ -11,7 +11,7 @@ const TowerAbility={DoubleTap:0,ShockBolts:1,Overloaded:2,Count:3};
 const TowerTargetMode={First:0,Strongest:1,Nearest:2,Count:3};
 const TowerChargeState={Ready:0,Charging:1,Burst:2,Recovery:3};
 const UiAction={None:-1,Target:0,Charge:1,Move:2,AbilityDoubleTap:3,AbilityShockBolts:4,AbilityOverloaded:5,AbilityMove:6,Spawn:7,Count:8};
-const definitions = new Function('draw_defender', 'defender_muzzle', 'draw_wanderer', 'wanderer_muzzle', 'GlossaryTerm', 'TowerAbility', `${translate(read('scripts/scr_definitions/scr_definitions.gml'))}; return build_tower_catalog();`)(() => {}, () => {}, () => {}, () => {}, GlossaryTerm, TowerAbility);
+const definitions = new Function('draw_defender', 'defender_muzzle', 'draw_wanderer', 'wanderer_muzzle', 'GlossaryTerm', 'TowerAbility', `function draw_triage(){} function triage_muzzle(){} ${translate(read('scripts/scr_definitions/scr_definitions.gml'))}; return build_tower_catalog();`)(() => {}, () => {}, () => {}, () => {}, GlossaryTerm, TowerAbility);
 const code = translate(read('scripts/scr_combat/scr_combat.gml'));
 const shared = { paused: false };
 function makeTower(enemies, definition = definitions.vestral) {
@@ -139,6 +139,7 @@ input.ui_pointer_blocked = () => input.blocked;
 input.mouse_check_button_pressed = button => button===1 && input.pressed;
 input.tower_cancel_move=()=>false;
 input.obj_game.loadout={selected:-1};input.loadout_select=()=>{};
+input.loadout_reward_active=()=>false;
 input.mouse_check_button = () => input.held;
 input.mouse_check_button_released = () => input.released;
 input.mouse_wheel_up = () => input.wheel_up;
@@ -146,6 +147,8 @@ input.mouse_wheel_down = () => input.wheel_down;
 input.keyboard_check_pressed = key => key === input.key;
 input.game_select_tower = tower => { input.obj_game.selected_tower = tower; };
 input.tower_request_charge = tower => { if (tower) input.charge_requests++; };
+input.obj_game.config.move_key=77;
+input.tower_request_move=tower=>{input.move_target=tower;};
 const inputSource = translate(read('objects/obj_input/Step_1.gml')).replace(/\bexit;/g, 'return;');
 const inputTick = new Function('s', 'actor', `with(s) { ${inputSource} }`);
 function pointer(pressed, held, released, x = 500, y = 280) {
@@ -172,6 +175,22 @@ assert.equal(input.obj_camera.target_zoom,1.1,'Wheel up zooms in');
 input.wheel_down = true; pointer(false,false,false); input.wheel_down = false;
 assert.equal(input.obj_camera.target_zoom,1,'Wheel down zooms out');
 console.log('PASS: click selection, C dispatch, drag suppression, fixed orbit, wheel zoom, and GUI gesture isolation.');
+input.obj_game.selected_tower=null;input.key=67;pointer(false,false,false);
+assert.equal(input.charge_requests,2,'C charges hovered tower with no open dossier');
+assert.equal(input.obj_game.selected_tower,null,'Hover shortcut does not open a dossier');
+let requested=null;input.tower_request_charge=tower=>requested=tower;
+const selectedElsewhere={x:20,y:20};input.obj_game.selected_tower=selectedElsewhere;
+pointer(false,false,false);assert.equal(requested,actor,'Hover takes priority over another selected tower');
+pointer(false,false,false,700,500);assert.equal(requested,selectedElsewhere,'Selection is the fallback off a tower');
+input.blocked=true;pointer(false,false,false);assert.equal(requested,selectedElsewhere,'UI cannot hover a tower behind it');
+input.blocked=false;input.obj_game.selected_tower=null;input.key=77;pointer(false,false,false);
+assert.equal(input.move_target,actor,'M starts a move directly from hover');
+input.key=null;input.obj_game.selected_tower=null;
+console.log('PASS: hover charge/move without selection, hover priority, selected fallback and UI occlusion.');
+input.loadout_reward_active=()=>true;requested=null;input.key=67;
+pointer(true,true,false);assert.equal(requested,null,'Reward overlay blocks tower shortcuts');
+assert.equal(input.pointer_down,false);assert.equal(input.hovered_tower,null);
+input.key=null;input.pressed=false;input.held=false;input.loadout_reward_active=()=>false;
 
 // Evaluate every cursor branch: GML compiles unknown constants as variable reads.
 const uiStep = read('objects/obj_ui/Step_2.gml');
@@ -258,7 +277,7 @@ run(waiting,120); assert.equal(waiting.s.stored_shots,4);
 leavingEnemy.world_x=1; run(waiting,150); assert.equal(waiting.s.shots_fired,4);
 console.log('PASS: Double Tap damage, unlimited attacks, lethal hits, shock cap/refresh/expiry, longer Lock, retargeting and waiting.');
 
-const panel={panel_left:24,panel_top:438,panel_open:1,spawn_left:30,spawn_top:60,spawn_width:214,spawn_height:42,term_regions:[]};
+const panel={panel_left:24,panel_top:438,panel_open:1,spawn_left:30,spawn_top:60,spawn_width:214,spawn_height:42,term_regions:[],tooltip_rect:[0,0,0,0]};
 const richDraws=[];
 const uiHost={clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),noone:null,obj_ui:panel,obj_game:{selected_tower:v.s,ui_theme:{underline:0}},mb_left:1,mx:0,my:0,
   loadout_pointer_blocked:()=>false,loadout_handle_input:()=>false,
@@ -367,7 +386,7 @@ assert.equal(spawned.length,0,'Round button must not directly create a debug ene
 uiHost.obj_game.paused=false;
 const initEnemy=new Function('s',`with(s){${read('objects/obj_enemy/Create_0.gml')}}`);
 for(const type of ['intrusion','fast','heavy']) {
- const e={id:null,enemy_type:type,health_scale:1,random:n=>n*0.37,ceil:Math.ceil,arctan2:Math.atan2,pi:Math.PI,obj_game:{enemy_catalog:enemyCatalog},obj_world:{route:[[1,2],[2,2]]},
+ const e={id:null,noone:null,enemy_type:type,health_scale:1,random:n=>n*0.37,ceil:Math.ceil,arctan2:Math.atan2,pi:Math.PI,obj_game:{enemy_catalog:enemyCatalog},obj_world:{route:[[1,2],[2,2]]},
  variable_instance_exists:(id,key)=>key in id,variable_struct_get:(s,k)=>s[k],project_x:x=>x,project_y:(x,y)=>y};
  for(const match of read('objects/obj_enemy/Create_0.gml').matchAll(/^([a-z_]+)=/gm))e[match[1]]=undefined;
  e.id=e;initEnemy(e);
@@ -415,7 +434,8 @@ shared.paused=true;assert.equal(moveApi.commit(mover.s,3,3),false);shared.paused
 assert.equal(moveApi.commit(mover.s,3,3),true);
 assert.equal(mover.s.move_active,true,'A valid move starts the phase dash instead of teleporting');
 assert.equal(mover.s.world_x,0,'The dash begins at the original footprint');
-run(mover,39);
+assert.ok(Math.abs(mover.s.move_duration-Math.hypot(3,3)/mover.s.move_speed)<1e-9);
+run(mover,Math.ceil(mover.s.move_duration*120));
 assert.deepEqual([mover.s.world_x,mover.s.world_y,mover.s.kills,mover.s.damage_dealt,mover.s.cooldown],[3,3,2,160,0.4]);
 assert.equal(mover.s.relocating,false);
 assert.equal(mover.s.move_active,false);
@@ -477,8 +497,8 @@ assert.equal(crossing.s.damage,123.5,'Only the twelfth lifetime stack gets the f
 
 const moveVictim=enemy(60,2);
 const sniper=makeTower([moveVictim],definitions.wanderer);
-Object.assign(sniper.s,{move_active:true,relocating:true,move_target_x:2,move_target_y:0,vigil:1,charge_lockout:5});
-run(sniper,39);
+Object.assign(sniper.s,{move_active:true,relocating:true,move_duration:2/sniper.s.move_speed,move_target_x:2,move_target_y:0,vigil:1,charge_lockout:5});
+run(sniper,Math.ceil(sniper.s.move_duration*120));
 assert.equal(sniper.s.move_active,false);
 assert.equal(sniper.s.shots_fired,0,'Relocation no longer triggers a skill attack');
 assert.equal(moveVictim.hit_points,60);
@@ -602,3 +622,40 @@ const popupStep=eventFn('objects/obj_impact/Step_0.gml');popup.obj_game.paused=t
 popup.obj_game.paused=false;popupStep(popup);assert.equal(popup.age,0.05);
 for(const age of [0,0.2,0.64]) {popup.age=age;eventFn('objects/obj_impact/Draw_0.gml')(popup);}
 console.log('PASS: text effects create no particles, pause with gameplay, and draw finite bouncing/fading labels.');
+// TRIAGE uses the production attack and charge controller.
+{
+ const victim=enemy(1000);victim.tourniquet_heal=0;
+ const {s,api}=makeTower([victim],definitions.triage);
+ s.hit_points=40;
+ api.fireHit(s,victim);api.fireHit(s,victim);
+ assert.equal(victim.tourniquet_heal,0);
+ api.fireHit(s,victim);
+ assert.equal(victim.hit_points,928);assert.ok(Math.abs(victim.tourniquet_heal-19.2)<1e-9);
+ assert.equal(api.movement(victim,1),.75);assert.equal(victim.shock_stacks,0);
+ victim.hit_points=1;api.fireHit(s,victim);
+ assert.ok(Math.abs(s.hit_points-59.2)<1e-9);
+ const meshes=new Function('s',`with(s){${translate(read('scripts/scr_defender/scr_defender.gml'))};return {draw:draw_triage,muzzle:triage_muzzle};}`)(rigHost);
+ for(const angle of [0,90,180,270,320]) {
+   meshes.draw(400,400,angle,1,4,1,1,0,3);
+   assert.ok(meshes.muzzle(400,400,angle,1,4,1,1,0,3).every(Number.isFinite));
+ }
+ console.log('PASS: TRIAGE dart damage, third-hit Tourniquet, 25% slow, killer healing and model geometry.');
+}
+
+{
+ const victim=enemy(500);victim.tourniquet_heal=24;
+ const {s,api}=makeTower([victim],definitions.triage);
+ s.obj_tower='tower';s.array_push=(a,v)=>a.push(v);
+ s.instance_number=o=>o==='tower'?1:1;s.instance_find=o=>o==='tower'?s:victim;
+ assert.equal(api.charge(s),true);
+ shared.paused=true;api.tick();assert.equal(s.charge_left,2.5);shared.paused=false;
+ for(let i=0;i<302 && s.charge_mode===TowerChargeState.Charging;i++)api.tick();
+ assert.equal(s.charge_mode,TowerChargeState.Ready);assert.equal(victim.tourniquet_heal,0);
+ assert.equal(s.shield_hp,33);assert.equal(s.hits_landed,0);assert.equal(s.charge_lockout,10);
+ s.move_elapsed=0;s.move_duration=.1;s.move_active=true;s.relocating=true;
+ s.move_from_x=0;s.move_from_y=0;s.move_target_x=3;s.move_target_y=0;
+ for(let i=0;i<13;i++)api.tick();
+ assert.equal(s.move_active,false);assert.equal(s.kit_left,12);assert.equal(s.kit_x,0);assert.equal(s.world_x,3);
+ assert.deepEqual(s.kit_healed,[]);
+ console.log('PASS: TRIAGE charge pause/completion, no charge attacks, cooldown and med-kit creation at departure point on arrival.');
+}

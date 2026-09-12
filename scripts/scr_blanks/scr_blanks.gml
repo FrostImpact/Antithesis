@@ -7,6 +7,7 @@ function blank_initialize_catalog() {
 }
 
 function blank_draw_model(_e) {
+    if(_e.enemy_definition.model=="lancer") { blank_draw_lancer(_e); return; }
     var frame=floor(_e.drift_phase*48/(pi*2)) mod 48;
     var column=frame mod 12;
     var row=floor(frame/12);
@@ -28,6 +29,59 @@ function blank_draw_model(_e) {
             left,top,sx,sy,c_white,clamp(_e.hit_flash/0.15,0,1)*0.5*emerge);
         gpu_set_blendmode(bm_normal);
     }
+}
+
+// Four suspended blades frame a coral lens; no additional atlas is needed.
+function blank_draw_lancer(_e) {
+    var z=obj_camera.zoom*_e.enemy_definition.visual_scale;
+    var presence=clamp(1-_e.spawn_left/_e.enemy_definition.spawn_duration,0,1);
+    var cy=_e.y-(30+sin(_e.drift_phase)*3)*z;
+    var opening=_e.laser_state=="aiming" ? 1-_e.laser_clock/_e.enemy_definition.laser_windup : 0;
+    var spread=(7+opening*5)*z;
+    var coral=make_colour_rgb(242,126,116);
+    draw_set_alpha(presence*0.24);draw_set_colour(c_black);
+    draw_ellipse(_e.x-16*z,_e.y-5*z,_e.x+16*z,_e.y+5*z,false);
+    draw_set_alpha(presence);
+    diamond(_e.x,cy,9*z,14*z,make_colour_rgb(22,28,34));
+    for(var side=-1;side<=1;side+=2) {
+        draw_set_colour(make_colour_rgb(191,194,189));
+        draw_triangle(_e.x+side*spread,cy-3*z,_e.x+side*5*z,cy-28*z,_e.x+side*18*z,cy-10*z,false);
+        draw_set_colour(make_colour_rgb(112,124,127));
+        draw_triangle(_e.x+side*spread,cy+3*z,_e.x+side*4*z,cy+22*z,_e.x+side*15*z,cy+9*z,false);
+    }
+    diamond(_e.x,cy,4*z,7*z,_e.hit_flash>0 ? c_white : coral);
+    draw_set_colour(coral);
+    draw_ellipse(_e.x-12*z,cy-12*z,_e.x+12*z,cy+12*z,true);
+    draw_set_alpha(1);
+}
+
+function blank_draw_laser(_e) {
+    if(_e.enemy_definition.model!="lancer" || _e.laser_state=="walking" || _e.spawn_left>0) return;
+    var z=obj_camera.zoom;
+    var sx=_e.x; var sy=_e.y-(30+sin(_e.drift_phase)*3)*z*_e.enemy_definition.visual_scale;
+    var tx=project_x(_e.laser_world_x,_e.laser_world_y);
+    var ty=project_y(_e.laser_world_x,_e.laser_world_y);
+    var coral=make_colour_rgb(242,126,116);
+    if(_e.laser_state=="aiming") {
+        var p=clamp(1-_e.laser_clock/_e.enemy_definition.laser_windup,0,1);
+        draw_set_alpha(0.35+p*0.55);draw_set_colour(coral);
+        for(var dash=0;dash<12;++dash) {
+            var t=dash/12;
+            draw_line_width(lerp(sx,tx,t),lerp(sy,ty-20*z,t),lerp(sx,tx,t+0.04),lerp(sy,ty-20*z,t+0.04),z);
+        }
+        var radius=(24-10*p)*z;
+        draw_ellipse(tx-radius,ty-radius*0.5,tx+radius,ty+radius*0.5,true);
+        draw_line_width(tx-5*z,ty,tx+5*z,ty,z);
+        draw_line_width(tx,ty-3*z,tx,ty+3*z,z);
+    } else {
+        var fade=clamp(_e.laser_clock/_e.enemy_definition.laser_duration,0,1);
+        draw_set_alpha(fade*0.24);draw_set_colour(coral);
+        draw_line_width(sx,sy,tx,ty-20*z,10*z);
+        draw_set_alpha(fade);draw_line_width(sx,sy,tx,ty-20*z,3*z);
+        draw_set_colour(c_white);draw_line_width(sx,sy,tx,ty-20*z,z);
+        diamond(tx,ty-20*z,7*z*fade,12*z*fade,coral);
+    }
+    draw_set_alpha(1);
 }
 
 function blank_draw_spawn_fx(_e) {

@@ -196,3 +196,5 @@ for(var tower_index=0;tower_index<instance_number(obj_tower);++tower_index)
 
 draw_set_alpha(1);
 ui_draw_world_feedback();
+
+for(var medic_index=0;medic_index<instance_number(obj_tower);++medic_index) triage_draw_support(instance_find(obj_tower,medic_index));

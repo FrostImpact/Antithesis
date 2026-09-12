@@ -5,7 +5,7 @@ const translate=s=>s.replace(/\bmod\b/g,'%');
 const catalog=new Function(read('scripts/scr_definitions/scr_definitions.gml')+';return build_enemy_catalog();')();
 const code=translate(read('scripts/scr_encounters/scr_encounters.gml'));
 const state={obj_game:{paused:false,encounter_settings:{wave_break:4}},obj_tower:'tower',obj_enemy:'enemy',
-    rewards:[],loadout_round_reward:r=>state.rewards.push(r),
+    rewards:[],loadout_round_reward:r=>state.rewards.push(r),rewardActive:false,loadout_reward_active:()=>state.rewardActive,
     array_push:(a,v)=>a.push(v),array_length:a=>a.length,min:Math.min,max:Math.max,
     hasTower:false,enemies:[],spawns:[],
     instance_exists:e=>e==='tower'?state.hasTower:e==='enemy'?state.enemies.length>0:!!e,
@@ -14,6 +14,7 @@ for(const m of code.slice(0,code.indexOf('function encounter_build_round')).matc
 state.obj_encounter=state;
 const api=new Function('s',`with(s){${code};return {init:encounter_initialize,start:encounter_start_round,tick:encounter_tick,build:encounter_build_round,escape:encounter_record_escape};}`)(state);
 api.init();assert.equal(api.start(),false,'Must place a tower before starting');
+state.hasTower=true;state.rewardActive=true;assert.equal(api.start(),false,'Choose the round reward before starting again');state.rewardActive=false;
 state.hasTower=true;state.obj_game.paused=true;assert.equal(api.start(),false);
 state.obj_game.paused=false;assert.equal(api.start(),true);assert.equal(api.start(),false,'No double-start');
 assert.equal(state.round_total,21);
@@ -62,6 +63,8 @@ console.log('PASS: fragment drift, root, slow, pause, route turns and escape rec
 
 // Use real debuff integration and the real Step event to measure route distance.
 actor.enemy_movement_time=new Function('s',`with(s){${translate(read('scripts/scr_combat/scr_combat.gml'))};return enemy_movement_time;}`)(actor);
+actor.enemy_tick_laser=new Function('s',`with(s){${translate(read('scripts/scr_combat/scr_combat.gml'))};return enemy_tick_laser;}`)(actor);
+Object.assign(actor,{noone:null,obj_tower:'tower',instance_number:()=>0,instance_exists:()=>false,laser_state:'walking',laser_clock:5});
 function travel(stacks,duration,lock,frames){
  Object.assign(actor,{progress:0,drift_phase:0,elapsed:0,spawn_left:0,shock_stacks:stacks,
    shock_slow:stacks*.05,shock_left:duration,lock_left:lock,destroyed:false});

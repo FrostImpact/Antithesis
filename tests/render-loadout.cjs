@@ -39,9 +39,9 @@ h.draw_text_ext=(x,y,text,sep,width)=>wrap(text,width).forEach((line,i)=>h.draw_
 h.string_height_ext=(text,sep,width)=>wrap(text,width).length*sep;
 g.font='14px Arial';g.textBaseline='top';
 const source=['scr_geometry','scr_map','scr_defender','scr_effects','scr_interface'].map(n=>read(`scripts/${n}/${n}.gml`)).join('\n');
-const names=['project_x','project_y','map_clip_polygon','map_draw_polygon','draw_ground_tile','is_path','map_draw_spawn_platform','map_draw_base_platform','diamond','draw_defender','draw_wanderer','draw_vigil_icon','ui_panel_y','ui_draw_rich_text','ui_control_rect','ui_draw_button','ui_stat_breakdown'];
+const names=['project_x','project_y','map_clip_polygon','map_draw_polygon','draw_ground_tile','is_path','map_draw_spawn_platform','map_draw_base_platform','diamond','draw_defender','draw_wanderer','draw_triage','draw_vigil_icon','ui_panel_y','ui_draw_rich_text','ui_control_rect','ui_draw_button','ui_stat_breakdown','ui_draw_surface'];
 const drawApi=new Function('s',`with(s){${source};return {${names.join(',')}};}`)(h);Object.assign(h,drawApi);
-h.obj_game.tower_catalog.vestral.draw_model=h.draw_defender;h.obj_game.tower_catalog.wanderer.draw_model=h.draw_wanderer;
+h.obj_game.tower_catalog.triage.draw_model=h.draw_triage;h.obj_game.tower_catalog.vestral.draw_model=h.draw_defender;h.obj_game.tower_catalog.wanderer.draw_model=h.draw_wanderer;
 const room=JSON.parse(fs.readFileSync('rooms/Room1/Room1.yy','utf8').replace(/,\s*([}\]])/g,'$1'));
 const instances=room.layers.find(l=>l.name==='Instances').instances;
 const worldPoint=i=>[(i.x-128)/64,(i.y-96)/64];
@@ -49,19 +49,53 @@ const regions=type=>instances.filter(i=>i.objectId.name===type).map(i=>{const [x
 h.land_shelves=regions('obj_map_surface');h.void_regions=regions('obj_map_void');
 h.route=instances.filter(i=>i.objectId.name==='obj_map_route').sort((a,b)=>a.imageIndex-b.imageIndex).map(worldPoint);
 h.obj_world={route:h.route,land_shelves:h.land_shelves,void_regions:h.void_regions};
-h.obj_game.config={gui_width:1366,gui_height:768};
+h.obj_game.config={gui_width:1366,gui_height:768,charge_key:67,move_key:77};
+h.chr=n=>String.fromCharCode(n);
 const ui={cr_default:0,GlossaryTerm:{None:-1},UiAction:h.UiAction,array_create:h.array_create};
 const init=read('objects/obj_ui/Create_0.gml');for(const m of init.matchAll(/^([a-z_]+)=/gm))ui[m[1]]=undefined;
 new Function('s',`with(s){${init}}`)(ui);h.obj_ui=ui;ui.panel_open=1;ui.panel_blend=1;
 const worldDraw=new Function('s',`with(s){${read('objects/obj_world/Draw_0.gml')}}`);
-h.loadout_draw=api.draw;
+h.loadout_draw=api.draw;h.loadout_reward_active=api.rewardActive;
+h.ui_health_colour=new Function('s',`with(s){${read('scripts/scr_interface/scr_interface.gml')};return ui_health_colour;}`)(h);
 const hudDraw=new Function('s',`with(s){with(obj_ui){${read('objects/obj_ui/Draw_64.gml')}}}`);
 function render(file){worldDraw(h);hudDraw(h);fs.mkdirSync('.build',{recursive:true});fs.writeFileSync(file,cv.toBuffer('image/png'));}
 api.use(0);api.tick(1);api.use(1);api.tick(1);
-h.obj_game.loadout.cards=[2,2,1,1];h.obj_game.loadout.selected=1;h.obj_game.loadout.fan_hover[1]=1;
+h.obj_game.loadout.cards=[2,2,1,1,1];h.obj_game.loadout.selected=1;h.obj_game.loadout.fan_hover[1]=1;
 render('.build/loadout-review.png');
 const d=h.obj_game.tower_catalog.vestral;
-h.obj_game.selected_tower={definition:d,damage:d.damage,attack_interval:d.attack_interval,attack_range:d.attack_range,charge_duration:d.charge_duration,
+h.obj_game.selected_tower={definition:d,damage:d.damage,attack_shots_left:0,hit_points:d.max_hit_points,display_hit_points:d.max_hit_points,max_hit_points:d.max_hit_points,move_speed:d.move_speed,attack_interval:d.attack_interval,attack_range:d.attack_range,charge_duration:d.charge_duration,
  charge_reuse_delay:d.charge_reuse_delay,charge_mode:0,charge_lockout:0,reject_pulse:0,target_mode:0,ability_detail_open:false};
 render('.build/loadout-dossier-review.png');
+h.obj_game.selected_tower.ability_detail_open=true;h.obj_game.selected_tower.ability_tab=1;ui.detail_blend=1;
+render('.build/loadout-ability-review.png');
+const w=h.obj_game.tower_catalog.wanderer;
+Object.assign(h.obj_game.selected_tower,{definition:w,damage:w.damage,hit_points:66,display_hit_points:66,max_hit_points:w.max_hit_points,move_speed:w.move_speed,attack_interval:w.attack_interval,attack_range:w.attack_range,charge_duration:w.charge_duration,vigil:4,vigil_earned:4});
+render('.build/loadout-wanderer-review.png');
+const medic=h.obj_game.tower_catalog.triage;
+Object.assign(h.obj_game.selected_tower,{definition:medic,damage:medic.damage,hit_points:110,display_hit_points:110,max_hit_points:110,move_speed:medic.move_speed,attack_interval:medic.attack_interval,attack_range:medic.attack_range,charge_duration:medic.charge_duration,charge_reuse_delay:medic.charge_reuse_delay});
+h.obj_game.loadout.selected=4;
+render('.build/loadout-triage-review.png');
+h.obj_game.loadout.selected=-1;h.obj_game.loadout.hover=-1;h.obj_game.selected_tower=null;
+h.obj_game.loadout.bar_pinned=false;api.tick(1);
+render('.build/loadout-minimized-review.png');
+api.reward(1);api.tick(.7);
+render('.build/reward-choice-review.png');
+api.choose(1);api.tick(.4);
+render('.build/reward-claim-review.png');
+api.tick(.5);api.addBits(150);api.notice('Bit Cache redeemed');api.tick(.3);
+render('.build/bits-gain-review.png');
+// Inspect the new enemy through its actual production draw functions.
+const blankApi=new Function('s',`with(s){${read('scripts/scr_blanks/scr_blanks.gml')};return {model:blank_draw_model,laser:blank_draw_laser};}`)(h);
+h.draw_clear([23,29,32]);h.draw_set_colour(h.obj_game.ui_theme.title);h.draw_text(48,40,'LANCER / LASER SEQUENCE');
+const laserDefinition=new Function(read('scripts/scr_definitions/scr_definitions.gml')+';return build_enemy_catalog().lancer;')();
+for(const [i,state] of ['walking','aiming','firing'].entries()) {
+ const x=160+i*430,y=390;h.obj_camera.zoom=2;
+ const e={x,y,enemy_definition:laserDefinition,spawn_left:0,drift_phase:0,hit_flash:0,laser_state:state,
+  laser_clock:state==='aiming'?.4:.2,laser_world_x:0,laser_world_y:0};
+ // Isolate projection only: beam drawing and model geometry remain production code.
+ const oldX=h.project_x,oldY=h.project_y;h.project_x=()=>x+145;h.project_y=()=>y+32;
+ blankApi.model(e);blankApi.laser(e);h.project_x=oldX;h.project_y=oldY;
+ h.draw_set_colour(h.obj_game.ui_theme.accent);h.draw_text(x-70,480,state.toUpperCase());
+}
+fs.writeFileSync('.build/laser-enemy-review.png',cv.toBuffer('image/png'));
 console.log('PASS: rendered production map and card/loadout HUD, with and without the tower dossier.');

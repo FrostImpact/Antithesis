@@ -1,3 +1,4 @@
+tourniquet_heal=0;
 progress=0;
 // Avoid GameMaker's built-in global health variable; combat state is per enemy.
 if(!variable_instance_exists(id,"enemy_type")) enemy_type="intrusion";
@@ -20,5 +21,10 @@ elapsed=0;
 spawn_left=enemy_definition.spawn_duration;
 max_hit_points=hit_points;
 drift_phase=random(pi*2);
+laser_state="walking";
+laser_clock=enemy_type=="lancer" ? enemy_definition.laser_cooldown : 0;
+laser_target=noone;
+laser_world_x=world_x;
+laser_world_y=world_y;
 
 

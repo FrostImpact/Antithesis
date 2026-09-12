@@ -1,6 +1,12 @@
 // Resolve clicks before placement/combat Step events. Pointer movement never orbits.
 clicked_tower=noone;
 clicked_ground=false;
+if(keyboard_check_pressed(obj_game.config.restart_key)) { room_restart(); exit; }
+if(keyboard_check_pressed(obj_game.config.pause_key)) obj_game.paused=!obj_game.paused;
+if(loadout_reward_active()) {
+    pointer_down=false; dragging=false; pressed_tower=noone; hovered_tower=noone;
+    ui_handle_input(); exit;
+}
 if(mouse_check_button_pressed(mb_left) && !ui_pointer_blocked()) {
     pointer_down=true; dragging=false;
     press_x=mouse_x; press_y=mouse_y; last_drag_x=mouse_x;
@@ -48,9 +54,13 @@ if(instance_exists(clicked_tower)) game_select_tower(clicked_tower);
 else if(clicked_ground && !instance_exists(obj_placement)) game_select_tower(noone);
 if(keyboard_check_pressed(vk_escape)) { obj_game.loadout.selected=-1; if(!tower_cancel_move()) game_select_tower(noone); }
 if(mouse_check_button_pressed(mb_right)) tower_cancel_move();
-if(keyboard_check_pressed(obj_game.config.restart_key)) { room_restart(); exit; }
-if(keyboard_check_pressed(obj_game.config.pause_key)) obj_game.paused=!obj_game.paused;
-if(keyboard_check_pressed(obj_game.config.charge_key)) tower_request_charge(obj_game.selected_tower);
+// The world hover takes priority; the open dossier remains a keyboard fallback.
+var shortcut_tower=instance_exists(hovered_tower) ? hovered_tower : obj_game.selected_tower;
+if(keyboard_check_pressed(obj_game.config.charge_key)) tower_request_charge(shortcut_tower);
+if(keyboard_check_pressed(obj_game.config.move_key)) {
+    if(instance_exists(obj_placement) && instance_exists(obj_placement.moving_tower)) tower_cancel_move();
+    else tower_request_move(shortcut_tower);
+}
 ui_handle_input();
 
 

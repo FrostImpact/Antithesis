@@ -2,17 +2,22 @@
 
 Open Antithesis.yyp in GameMaker and press F5.
 
-- Start with **200 Bits** and stored cards: two Vestral cards, one WANDERER card and one Bit Cache. Hover or select a card in the bottom-left fan, then click **Use Card**. Its animation finishes before the reward is granted.
-- Select a tower in the bottom-center hotbar, or press its **1–5** slot key, then click valid open ground to deploy it. Each placement spends one owned copy and its Bit cost (Vestral: 75; WANDERER: 120). Invalid placement and cancellation spend nothing. The hotbar has at most **five distinct tower types**, with no five-tower limit on deployed instances.
+- Start with **200 Bits** and stored cards: two Vestral cards, one WANDERER card, one TRIAGE card and one Bit Cache. Click a card in the bottom-left wheel to select it, then click it again or click its expanded detail card to redeem it. Its animation finishes before the reward is granted; there is no Use Card button.
+- Select a tower in the compact bottom-center tray, or press its **1–5** slot key, then click valid open ground to deploy it. Each placement spends its prepared card and Bit cost (Vestral: 75; WANDERER: 120), freeing the slot. Invalid placement and cancellation spend nothing. The tray holds **five prepared cards**, with no five-tower limit on deployed instances.
+- Click the tray's central diamond to slide it down or pin it open. When minimized, only its tip remains visible. Hover the tip to temporarily reveal the tray; it stays available while hovering its slots and retracts when the pointer leaves.
 - Hover over a tower to preview its range. Click it to open its dossier above the hotbar; the full range remains visible while the dossier is open. The dossier leaves the card fan and expanded card accessible.
 - Abilities appear in a vertical list (three per tower). Click an ability to open its description and click again to close it. Underlined terms reveal glossary cards on hover. Click the targeting control to cycle First, Strongest and Nearest.
-- Click Charge in the panel, or press C, to use Overloaded on the selected tower.
-- Click Move Tower, then click valid open ground to relocate. Escape, right-click, Cancel Move or closing the panel cancels. Confirming sends the tower through a short phase dash with fading echoes; stats and cooldowns are preserved and its combat timer remains paused until arrival. Movement is unavailable during Charge, burst or recovery.
+- Hover a tower and press **C** to charge its skill without opening the dossier. The hovered tower takes priority over a different selected tower; when no tower is hovered, C uses the selected tower. The Charge button still works.
+- Hover a tower and press **M**, or click Move Tower, then click valid open ground to relocate. M again, Escape, right-click or Cancel Move cancels the destination preview. Confirming sends the tower through an eased phase dash with fading echoes. **MVE SPD** is average world tiles per second: travel time equals distance divided by speed (Vestral: 6; WANDERER: 7.5). Stats and cooldowns are preserved, and combat timers pause until arrival. Movement is unavailable during Charge, burst or recovery.
 - Place at least one tower, then click **Start Round** at the top left. Each round contains three waves with four-second breaks. Clear the final wave, prepare your towers, and start the next round when ready. The button is disabled while paused or during a round.
 - Roll the mouse wheel to smoothly zoom the fixed isometric view in or out.
 - Escape deselects; P pauses; R restarts.
 
-The card fan sits in a quarter-circle pocket at the bottom left. Cards lift on hover and expand into a readable detail card with an explicit **Use Card** button. Duplicate cards stack in storage. Tower rewards add copies to the hotbar, which shows model previews, copy counts and Bit costs. Bit Cache grants 150 Bits; Bounty Protocol permanently adds 2 Bits per kill, stacking with repeat uses. Kills normally grant 6 Bits. Every completed three-wave round grants 75 Bits and three random cards, stored without automatically being used. The shuffled nine-card deck contains three cards for each tower, two Bit Caches and one Bounty Protocol; it reshuffles when exhausted. Pause freezes card-use animations and reward delivery. These are initial tuning values.
+The card wheel sits in a quarter-circle pocket at the bottom left. Cards lift on hover and expand into a clickable detail card. Duplicate cards stack in storage. Redeeming a tower card prepares it in the tray, which shows models, copy counts and costs; hover a slot for its name. Bit Cache grants 150 Bits; Bounty Protocol permanently adds 2 Bits per kill, stacking with repeat uses. Kills normally grant 6 Bits.
+
+Every completed three-wave round grants **75 Bits and a choice of one card from three distinct offers**. Cards slide into view in sequence. Clicking one discards the others and sends the chosen card into the wheel; it is stored only when that animation finishes. The next round and world actions wait until the choice is complete. Offers draw from the shuffled twelve-card deck (three of each tower, two Bit Caches, one Bounty Protocol), skipping duplicates within a selection and reshuffling when exhausted. Pause freezes selection, card delivery and reward animations.
+
+Bits gains display a floating **+X** beside the balance while the visible total quickly counts up in integer steps. The actual currency is available immediately, including during the animation; spending and overlapping rewards keep the display accurate. Notifications slide and fade in, show a small lifetime line, and transition to a new message before disappearing.
 
 Pit walls are clipped to the projected opening so they cannot overlap the surrounding ground. Placement checks include the visible pit rim and the entire tower footprint. Touching land shelves form one continuous placement surface; gaps and unsupported edges remain blocked.
 
@@ -52,6 +57,10 @@ The enemy route has two low platforms derived directly from its authored endpoin
 
 ## Verification
 
+Run `node tests/progression-ui.cjs` for reward selection/delivery, duplicate protection, pause, tray minimize/peek/pin behavior, hidden hit regions, currency animation and spending, notification transitions, and the shared health-color ramp. The loadout renderer also produces reward selection, claim, minimized tray and Bits-gain review images in `.build`.
+
+Run `node tests/laser.cjs` for laser windup, single-hit damage, dodging, Lock interruption, target loss, tower destruction cleanup, pause, route movement and encounter inclusion. The controller suite also checks hover shortcut priority and movement duration. `node tests/render-loadout.cjs` renders both tower dossiers, the card/loadout HUD and the Lancer's walking, aiming and firing states.
+
 Run `node tests/encounters.cjs` for round start guards, wave completion, staggered spawning, pause, intermissions, scaling, escapes and enemy drift timing. `node tests/blanks.cjs` checks all 144 frames for clipping, shipped sprite parity, frame selection, zoom anchors, drift seams and draw submission counts. `node tests/render-blanks.cjs` regenerates the model sheet and motion study from the sprite assets.
 
 Run `node tests/controllers.cjs` for checks against the production control logic: targeting, independent towers, Double Tap, sustained firing, slow and Lock timing, charge storage/retargeting, pause, wheel zoom, tab actions, exact GUI hit regions, room-authored geometry, relocation animation and click/key separation.
@@ -64,6 +73,23 @@ WANDERER checks cover suppression of normal attacks, global targeting, strict ex
 
 ## Interaction references
 
+The HUD uses dark slate surfaces, restrained mint accents, fine borders and consistent spacing. Tower dossiers show ATK, ATK SPD, range, charge time, MVE SPD and current HP. Hover MVE SPD for its calculation. The compact tray has no heading or deploy legend, and the hover-a-tower box is removed. Charge bars use gray fill with no adjacent diamond. The loadout handle is a solid half-diamond protruding above the tray, without an inner symbol. Ready charge skills retain the highlighted **[C] READY** dossier button.
+
+**LANCER** is a fourth Blank, introduced in round one's third wave and appearing more often in later rounds. It has 140 base HP and moves at 0.42 route segments/s. Every five seconds, if a tower is within 3.8 world tiles, it stops and marks that tower's location for 1.2 seconds, then fires a coral laser for 24 damage in a small 0.42-tile impact radius. The beam deals damage once. Move away from the marked location to dodge, or apply Lock during the windup to interrupt it. It resumes walking after the shot. Its split shell, lens and effects are drawn procedurally.
+
+Towers have health (Vestral: 120 HP; WANDERER: 90 HP) and damage popups. All tower and enemy health bars remain visible, including at full health. Their fill eases after damage and uses a continuous lime-to-amber-to-red gradient. At zero HP a tower is destroyed, clearing its selection and any pending move preview. Movement does not restore health, and lost tower cards/Bits are not refunded.
+
 The modular dossier separates identity, stats, controls and skill copy into clearly spaced regions instead of enclosing everything in one panel. Underlined terms reveal animated glossary cards. The environment is a naturally distorted null realm: an enlarged irregular landmass with uneven cliff depth, clustered rift growths, mineral stains, branching surface faults and suspended world-space reality tears. Its monochrome geology moves subtly without reading as constructed technology.
 
 Polish adapted from [Overshot v.2 selection panels](https://github.com/FrostImpact/Overshot-v.2/blob/main/objects/obj_ball_select/Step_0.gml): damped opening motion, eased hover highlights, press feedback and ability-detail transitions. [Overshot enemy feedback](https://github.com/FrostImpact/Overshot-v.2/blob/main/objects/obj_basic/Draw_0.gml) informed the small hit squash and delayed health damage segment. These are original implementations for this game, with no borrowed assets.
+
+
+TRIAGE — “Your story does not end here.” — Support / Medic
+
+TRIAGE starts as a stored card and joins the reward deck. Initial tuning: 100 Bits, 24 ATK, 110 HP, one dart per second, 2.8 range and 7 move speed. Assessment deals 100% ATK per dart; every third landed attack applies a persistent 25% Tourniquet slow. A marked kill heals its killer for 80% of the applying TRIAGE's ATK, captured on application. Reapplication replaces the mark without stacking; its healing survives the medic's death. Tourniquet combines multiplicatively with Shock and respects Lock.
+
+Resuscitation charges for 2.5 seconds with a 10-second cooldown. During charge, allied towers within 2.8 tiles (including TRIAGE) cannot drop below 1 HP. Completion consumes nearby Tourniquets and grants every allied tower a shield worth 30% of its own maximum HP. Shields absorb damage first and decay linearly over three seconds. Recasting refreshes rather than stacks the shield.
+
+Rapid Response creates a kit at the departure point upon arrival, replacing that medic's previous kit. For 12 seconds, each tower within 1.5 tiles can receive one heal worth 120% ATK, including later entrants. Kits expire with their owner, remain active during subsequent movement, and pause with the game. Healing caps at maximum HP. These durations, radii and once-per-kit healing are initial balance choices for unspecified details.
+
+The model uses the supplied hooded medic reference: ivory split coat, recessed cyan lens, medical cross, brown harness and field backpack, with a dart applicator. See [the model study](docs/triage-design.png). Run `node tests/triage.cjs` and `node tests/controllers.cjs` for support and controller checks; `node tests/render-triage.cjs` regenerates its geometry study. The HUD renderer includes a TRIAGE dossier image.

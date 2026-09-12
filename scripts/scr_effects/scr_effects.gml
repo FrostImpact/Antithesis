@@ -41,6 +41,12 @@ function tower_draw_attack_fx(_tower) {
     var tx=project_x(_tower.beam_world_x,_tower.beam_world_y);
     var ty=project_y(_tower.beam_world_x,_tower.beam_world_y)-20*obj_camera.zoom;
     var intensity=clamp(_tower.beam/max(0.001,_tower.shot_fx_duration),0,1);
+    if(_tower.definition.key=="triage") {
+        var dart=1-intensity;var dx=lerp(muzzle[0],tx,dart);var dy=lerp(muzzle[1],ty,dart);
+        draw_set_colour(make_colour_rgb(204,224,224));draw_set_alpha(1);
+        draw_line_width(dx,dy,lerp(muzzle[0],tx,min(1,dart+0.16)),lerp(muzzle[1],ty,min(1,dart+0.16)),2*obj_camera.zoom);
+        return;
+    }
     var special=_tower.finisher_flash>0;
     var colour=_tower.definition.key=="wanderer" ? make_colour_rgb(69,226,235) : (special ? make_colour_rgb(242,216,148) : make_colour_rgb(111,218,239));
     draw_set_alpha(intensity*0.3);
@@ -65,6 +71,7 @@ function tower_draw_attack_fx(_tower) {
     draw_set_alpha(1);
 }
 function tower_draw_charge_fx(_tower) {
+    if(_tower.definition.key=="triage") return;
     if(_tower.definition.key=="wanderer") { wanderer_draw_charge_fx(_tower); return; }
     if(_tower.charge_mode!=TowerChargeState.Charging) return;
     var progress=tower_charge_progress(_tower);
@@ -215,3 +222,24 @@ function wanderer_draw_move_fx(_tower) {
     draw_set_alpha(1);gpu_set_blendmode(bm_normal);
 }
 
+function triage_draw_field(_wx,_wy,_radius,_alpha) {
+    draw_set_colour(make_colour_rgb(123,222,209));draw_set_alpha(_alpha);
+    var px=project_x(_wx+_radius,_wy);var py=project_y(_wx+_radius,_wy);
+    for(var i=1;i<=48;++i) {
+        var a=i*360/48;var nx=project_x(_wx+dcos(a)*_radius,_wy+dsin(a)*_radius);var ny=project_y(_wx+dcos(a)*_radius,_wy+dsin(a)*_radius);
+        draw_line_width(px,py,nx,ny,1.5*obj_camera.zoom);px=nx;py=ny;
+    }
+    draw_set_alpha(1);
+}
+function triage_draw_support(_tower) {
+    if(_tower.definition.key!="triage") return;
+    if(_tower.charge_mode==TowerChargeState.Charging) triage_draw_field(_tower.world_x,_tower.world_y,_tower.attack_range,0.65);
+    if(_tower.kit_left>0) {
+        triage_draw_field(_tower.kit_x,_tower.kit_y,_tower.definition.kit_radius,0.3*min(1,_tower.kit_left));
+        var px=project_x(_tower.kit_x,_tower.kit_y);var py=project_y(_tower.kit_x,_tower.kit_y);var z=obj_camera.zoom;
+        draw_set_alpha(min(1,_tower.kit_left));draw_set_colour(make_colour_rgb(206,207,202));
+        draw_rectangle(px-7*z,py-8*z,px+7*z,py+2*z,false);
+        draw_set_colour(make_colour_rgb(61,164,168));draw_rectangle(px-2*z,py-7*z,px+2*z,py+z,false);
+        draw_rectangle(px-5*z,py-4*z,px+5*z,py-1*z,false);draw_set_alpha(1);
+    }
+}
