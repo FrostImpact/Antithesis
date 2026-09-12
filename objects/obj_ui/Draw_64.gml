@@ -45,10 +45,32 @@ draw_set_halign(fa_right); draw_text_transformed(px+346,py+16,tower_status(tower
 
 ui_draw_rich_text(px+14,py+45,332,definition.role_copy,18,theme.copy);
 
+// --- FIXED LINE 49 ERROR ---
+// Evaluated cleanly using if/else strings rather than un-parenthesized chained ternaries.
+var role_desc = "CC / SUB-DPS";
+if (definition.key == "singularity") role_desc = "AOE / AREA DENIAL";
+else if (definition.key == "triage") role_desc = "SUPPORT / MEDIC";
+else if (definition.key == "wanderer") role_desc = "EXECUTION / SNIPER";
+
 draw_set_colour(theme.muted);
-draw_text(px+14,py+72,definition.key=="triage" ? "SUPPORT / MEDIC" : (definition.key=="wanderer" ? "EXECUTION / SNIPER" : "CC / SUB-DPS"));
+draw_text(px+14,py+72, role_desc);
+// ---------------------------
+
 draw_set_halign(fa_right);draw_set_colour(ui_health_colour(tower.display_hit_points/tower.max_hit_points));
 draw_text_transformed(px+346,py+74,string(tower.hit_points)+" / "+string(tower.max_hit_points)+" HP",0.85,0.85,0);draw_set_halign(fa_left);
+if(definition.key=="singularity") {
+    for(var badge=0;badge<2;++badge) {
+        var bx=px+badge*54;
+        draw_set_colour(theme.surface);draw_rectangle(bx,py-54,bx+44,py-10,false);
+        draw_set_colour(make_colour_rgb(156,117,207));draw_rectangle(bx,py-54,bx+44,py-10,true);
+        draw_singularity_icon(bx+22,py-39,11,badge);
+        draw_set_colour(theme.title);draw_set_halign(fa_center);
+        var count_text=string(badge==0 ? array_length(tower.debris) : tower.density);
+        var count_scale=min(0.85,36/max(1,string_width(count_text)));
+        draw_text_transformed(bx+22,py-27,count_text,count_scale,count_scale,0);
+        draw_set_halign(fa_left);
+    }
+}
 if(definition.key=="wanderer") {
     draw_set_colour(theme.surface);draw_rectangle(px,py-54,px+44,py-10,false);
     draw_set_colour(make_colour_rgb(159,193,99));draw_rectangle(px,py-54,px+44,py-10,true);
@@ -79,7 +101,9 @@ if(progress>0) {
 }
 
 var modes=["FIRST","STRONGEST","NEAREST"];
-ui_draw_button(UiAction.Target,"TARGET  "+modes[tower.target_mode],true);
+// Wrapped this ternary in parenthesis so it doesn't cause a similar compiler error
+ui_draw_button(UiAction.Target, (definition.key=="singularity" ? "ALL IN RANGE" : "TARGET  "+modes[tower.target_mode]), definition.key!="singularity");
+
 var ready=tower_can_charge(tower);
 var charge_label=ready ? "["+chr(obj_game.config.charge_key)+"]  READY" : tower_status(tower);
 ui_draw_button(UiAction.Charge,charge_label,ready,ready || tower.charge_mode!=TowerChargeState.Ready);
@@ -91,7 +115,7 @@ if(tower.reject_pulse>0) {
     draw_set_alpha(panel_blend);
 }
 var move_label=tower.move_active ? "MOVING" : (tower.relocating ? "["+chr(obj_game.config.move_key)+"]  CANCEL MOVE" : "["+chr(obj_game.config.move_key)+"]  MOVE TOWER");
-var move_enabled=!tower.move_active && (tower.relocating || (!obj_game.paused && tower.attack_shots_left<=0 && tower.charge_mode==TowerChargeState.Ready));
+var move_enabled=!(tower.stun_left>0) && !(definition.key=="singularity" && (tower.pulse_left>0 || tower.summon_left>0 || tower.pulse_fx>0 || tower.skill_release>0)) && !tower.move_active && (tower.relocating || (!obj_game.paused && tower.attack_shots_left<=0 && tower.charge_mode==TowerChargeState.Ready));
 ui_draw_button(UiAction.Move,move_label,move_enabled,tower.relocating);
 
 for(var tab=0;tab<array_length(definition.abilities);++tab) {
@@ -143,6 +167,13 @@ if(point_in_rectangle(stat_mx,stat_my,14,110,346,164)) {
     draw_set_alpha(panel_blend*0.98);ui_draw_surface(sx,sy,sx+width,sy+height);
     draw_set_colour(theme.title);draw_text(sx+14,sy+9,detail.title);
     draw_set_colour(theme.copy);draw_text_ext(sx+14,sy+31,detail.body,18,width-28);
+}
+if(definition.key=="singularity" && (point_in_rectangle(stat_mx,stat_my,0,-54,44,-10) || point_in_rectangle(stat_mx,stat_my,54,-54,98,-10))) {
+    var density_badge=stat_mx>=54;
+    var sx=px+(density_badge ? 54 : 0);var sy=max(8,py-156);
+    tooltip_rect=[sx,sy,sx+300,sy+92];draw_set_alpha(panel_blend*0.98);ui_draw_surface(sx,sy,sx+300,sy+92);
+    draw_set_colour(theme.title);draw_text(sx+14,sy+10,density_badge ? "DENSITY" : "DEBRIS");
+    draw_set_colour(theme.copy);draw_text_ext(sx+14,sy+34,density_badge ? "Stored instant pulses. One stack skips a Basic Attack's windup." : "Orbiting fragments. Each lasts 5s; up to six can exist at once.",18,272);
 }
 draw_set_alpha(1);
 loadout_draw();

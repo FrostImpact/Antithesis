@@ -1,17 +1,30 @@
-function tower_heal(_tower,_amount) {
+function tower_heal(_tower,_amount,_source_x=undefined,_source_y=undefined,_source_height=6) {
     if(!instance_exists(_tower) || _tower.hit_points<=0) return;
     var healed=min(_amount,_tower.max_hit_points-_tower.hit_points);
     _tower.hit_points+=healed;
-    if(healed>0) combat_text(_tower,"+"+string_format(healed,1,1),true);
+    if(healed>0) {
+        combat_text(_tower,"+"+string_format(healed,1,1),true);
+        triage_emit("heal",_tower.world_x,_tower.world_y,_tower);
+        if(_source_x!=undefined && _source_y!=undefined) {
+            instance_create_depth(0,0,-10020,obj_impact,{effect_kind:"heal_arc",burst:false,
+                world_x:_source_x,world_y:_source_y,source_height:_source_height,
+                target_x:_tower.world_x,target_y:_tower.world_y,fx_owner:_tower});
+        }
+    }
 }
 function triage_resuscitate(_tower) {
+    triage_emit("release",_tower.world_x,_tower.world_y,noone,_tower.attack_range);
     for(var i=0;i<instance_number(obj_enemy);++i) {
         var enemy=instance_find(obj_enemy,i);
-        if(point_distance(_tower.world_x,_tower.world_y,enemy.world_x,enemy.world_y)<=_tower.attack_range) enemy.tourniquet_heal=0;
+        if(point_distance(_tower.world_x,_tower.world_y,enemy.world_x,enemy.world_y)<=_tower.attack_range) {
+            if(enemy.tourniquet_heal>0) triage_emit("consume",enemy.world_x,enemy.world_y);
+            enemy.tourniquet_heal=0;
+        }
     }
     for(var i=0;i<instance_number(obj_tower);++i) {
         var ally=instance_find(obj_tower,i);
         ally.shield_hp=max(ally.shield_hp,ally.max_hit_points*0.3);
+        triage_emit("shield",ally.world_x,ally.world_y,ally);
     }
 }
 function triage_tick_support(_dt) {
@@ -25,9 +38,10 @@ function triage_tick_support(_dt) {
             if(point_distance(tower.kit_x,tower.kit_y,ally.world_x,ally.world_y)>tower.definition.kit_radius) continue;
             var healed=false;
             for(var k=0;k<array_length(tower.kit_healed);++k) if(tower.kit_healed[k]==ally) healed=true;
-            if(!healed) { tower_heal(ally,tower.damage*1.2); array_push(tower.kit_healed,ally); }
+            if(!healed) { tower_heal(ally,tower.damage*1.2,tower.kit_x,tower.kit_y); array_push(tower.kit_healed,ally); }
         }
         tower.kit_left=max(0,tower.kit_left-_dt);
+        if(tower.kit_left<=0) triage_emit("expire",tower.kit_x,tower.kit_y);
     }
 }
 
@@ -38,6 +52,18 @@ damage=definition.damage;
 max_hit_points=definition.max_hit_points;
 hit_points=max_hit_points;
 shield_hp=0;
+stun_left=0;
+debris=[];
+debris_serial=0;
+density=0;
+pending_density=0;
+pulse_left=0;
+pulse_fx=0;
+skill_release=0;
+summon_left=definition.key=="singularity" ? definition.summon_duration : 0;
+orbit_clock=0;
+orbit_x=world_x;
+orbit_y=world_y;
 kit_left=0;
 kit_healed=[];
 kit_x=world_x;
@@ -76,7 +102,7 @@ shot_y=y;
 // Per-instance charge state and reserved attacks.
 attack_interval=definition.attack_interval;
 shot_interval=definition.shot_interval;
-shot_fx_duration=min(0.06,shot_interval*0.6);
+shot_fx_duration=definition.key=="triage" ? 0.22 : min(0.06,shot_interval*0.6);
 attack_shots_left=0;
 attack_shot_clock=0;
 attack_overloaded=false;
@@ -107,21 +133,35 @@ function tower_tick() {
 var dt=min(delta_time/1000000,0.05);
 if(obj_game.paused) return;
 hit_flash=max(0,hit_flash-dt);
-display_hit_points=lerp(display_hit_points,hit_points,1-exp(-8*dt));
+// Live HP drops immediately; the gray trail holds briefly, then catches up.
+if(display_hit_points<hit_points) display_hit_points=hit_points;
+else if(hit_flash<=0) display_hit_points=lerp(display_hit_points,hit_points,1-exp(-8*dt));
 if(abs(display_hit_points-hit_points)<0.01) display_hit_points=hit_points;
 var skill_ready=tower_can_charge(id);
 charge_ready_blend=lerp(charge_ready_blend,skill_ready ? 1 : 0,1-exp(-10*dt));
 charge_ready_pulse=max(0,charge_ready_pulse-dt*1.5);
 if(skill_ready && !charge_was_ready) charge_ready_pulse=1;
 charge_was_ready=skill_ready;
+if(definition.key=="singularity") singularity_tick_orbit(id,dt);
+if(stun_left>0) {
+    var stunned=min(dt,stun_left);stun_left=max(0,stun_left-dt);dt-=stunned;
+    if(dt<=0.000001) return;
+}
+if(summon_left>0) {
+    idle_time+=dt;summon_left=max(0,summon_left-dt);
+    if(summon_left<=0.000001) summon_left=0;
+    return;
+}
 if(move_active) { tower_tick_move(id,dt); return; }
 if(relocating) return;
 idle_time+=dt;
 beam=max(0,beam-dt);
-recoil*=exp(-(definition.key=="wanderer" ? 8 : 14)*dt);
+recoil*=exp(-(definition.key=="wanderer" ? 8 : (definition.key=="triage" ? 9 : 14))*dt);
 settle=max(0,settle-dt*2);
 finisher_flash=max(0,finisher_flash-dt);
 charge_lockout=max(0,charge_lockout-dt);
+
+if(definition.key=="singularity") { singularity_tick_attack(id,dt); return; }
 
 // Overloaded retargets and keeps its remaining attacks if no enemy is in range.
 var target=tower_find_target(id,definition.key=="wanderer" && charge_mode==TowerChargeState.Charging);
@@ -140,7 +180,7 @@ if(tracking) {
     turn_velocity*=exp(-10*dt);
 }
 var charging=charge_mode==TowerChargeState.Charging;
-charge_pose=lerp(charge_pose,charging ? 1 : 0,1-exp(-9*dt));
+charge_pose=lerp(charge_pose,charging ? 1 : 0,1-exp(-(definition.key=="triage" ? 5 : 9)*dt));
 // Keep tracking during Charge so a banked burst can begin immediately when a
 // target was already present. Targetless charges still acquire normally later.
 var aim_goal=tracking && charge_mode!=TowerChargeState.Recovery ? 1 : 0;
@@ -229,13 +269,19 @@ function tower_find_target(_tower,_unlimited=false) {
     return best;
 }
 function tower_can_charge(_tower) {
-    return instance_exists(_tower) && !obj_game.paused && !_tower.relocating &&
+    return instance_exists(_tower) && !obj_game.paused && !_tower.relocating && _tower.stun_left<=0 &&
+        (_tower.definition.key!="singularity" || (_tower.pulse_left<=0 && _tower.summon_left<=0 && _tower.pulse_fx<=0 && _tower.skill_release<=0)) &&
         _tower.attack_shots_left<=0 && _tower.charge_mode==TowerChargeState.Ready &&
         _tower.charge_lockout<=0 && _tower.settle<=0;
 }
 function tower_request_charge(_tower) {
     if(!instance_exists(_tower)) return false;
     if(!tower_can_charge(_tower)) { _tower.reject_pulse=1; return false; }
+    if(_tower.definition.key=="singularity") {
+        _tower.pending_density=array_length(_tower.debris);
+        _tower.debris=[];
+        singularity_emit("horizon",_tower.world_x,_tower.world_y,_tower.attack_range);
+    }
     _tower.charge_mode=TowerChargeState.Charging;
     _tower.charge_left=_tower.charge_duration;
     _tower.stored_shots=0;
@@ -312,25 +358,12 @@ function tower_fire_hit(_tower,_target) {
     else if(_tower.definition.key=="triage" && _tower.hits_landed mod 3==0) {
         _target.tourniquet_heal=_tower.damage*0.8;
         combat_text(_target,"Tourniquet",true);
+        triage_emit("mark",_target.world_x,_target.world_y);
     }
-    if(_tower.definition.key!="wanderer") instance_create_depth(_target.x,_target.y-20,-10000,obj_impact,{effect_kind:_target.hit_points<=0 ? "kill" : "hit",burst:_target.hit_points<=0,world_x:_target.world_x,world_y:_target.world_y});
+    if(_tower.definition.key=="triage") triage_emit(_target.hit_points<=0 ? "kill" : "dart",_target.world_x,_target.world_y);
+    if(_tower.definition.key=="vestral") instance_create_depth(_target.x,_target.y-20,-10000,obj_impact,{effect_kind:_target.hit_points<=0 ? "kill" : "hit",burst:_target.hit_points<=0,world_x:_target.world_x,world_y:_target.world_y});
     combat_text(_target,string_format(dealt,1,dealt==floor(dealt) ? 0 : 1),false,_tower.hits_landed mod 3);
-    if(_target.hit_points<=0) {
-        if(_target.tourniquet_heal>0) tower_heal(_tower,_target.tourniquet_heal);
-        _tower.kills+=1;
-        loadout_award_kill();
-        if(_tower.definition.key=="wanderer") {
-            var stacks=clamp(ceil(dealt/_tower.definition.vigil_damage_step),1,4);
-            var full=min(stacks,max(0,_tower.definition.vigil_breakpoint-_tower.vigil_earned));
-            _tower.vigil+=stacks;
-            _tower.vigil_earned+=stacks;
-            _tower.damage+=full*_tower.definition.vigil_attack+(stacks-full)*_tower.definition.vigil_attack_reduced;
-            _tower.charge_lockout*=1-_tower.definition.kill_cooldown_reduction;
-            instance_create_depth(_tower.x,_tower.y,-10002,obj_impact,{effect_kind:"vigil",burst:false,
-                world_x:_tower.world_x,world_y:_tower.world_y,popup_stacks:stacks});
-        }
-        instance_destroy(_target);
-    }
+    tower_resolve_kill(_tower,_target,dealt);
     return true;
 }
 // Independent text instances survive a lethal hit; status labels share this path.
@@ -366,6 +399,10 @@ function tower_charge_progress(_tower) {
     return 0;
 }
 function tower_status(_tower) {
+    if(_tower.summon_left>0) return "EMERGING";
+    if(_tower.stun_left>0) return "STUNNED";
+    if(_tower.definition.key=="singularity" && _tower.pulse_left>0) return "PULSE WINDUP";
+    if(_tower.definition.key=="singularity" && (_tower.pulse_fx>0 || _tower.skill_release>0)) return "RECOVERING";
     if(_tower.relocating) return "RELOCATING";
     switch(_tower.charge_mode) {
         case TowerChargeState.Charging: return "CHARGING";
@@ -407,6 +444,9 @@ function tower_tick_move(_tower,_dt) {
         _tower.y=project_y(_tower.world_x,_tower.world_y);
         _tower.depth=-_tower.y;
         if(_tower.definition.key=="triage") {
+            if(_tower.kit_left>0) triage_emit("expire",_tower.kit_x,_tower.kit_y);
+            triage_emit("land",_tower.world_x,_tower.world_y);
+            triage_emit("kit",_tower.move_from_x,_tower.move_from_y);
             _tower.kit_x=_tower.move_from_x; _tower.kit_y=_tower.move_from_y;
             _tower.kit_left=_tower.definition.kit_duration; _tower.kit_healed=[];
         }
@@ -454,7 +494,7 @@ function placement_is_valid(_wx,_wy,_ignore=noone) {
 }
 function tower_request_move(_tower) {
     if(!instance_exists(_tower)) return false;
-    if(obj_game.paused || instance_exists(obj_placement) || _tower.relocating ||
+    if(obj_game.paused || _tower.stun_left>0 || (_tower.definition.key=="singularity" && (_tower.pulse_left>0 || _tower.summon_left>0 || _tower.pulse_fx>0 || _tower.skill_release>0)) || instance_exists(obj_placement) || _tower.relocating ||
         _tower.attack_shots_left>0 || _tower.charge_mode!=TowerChargeState.Ready) {
         _tower.reject_pulse=1;
         return false;
@@ -470,7 +510,7 @@ function tower_cancel_move() {
     return true;
 }
 function tower_commit_move(_tower,_wx,_wy) {
-    if(!instance_exists(_tower) || !_tower.relocating || obj_game.paused || !placement_is_valid(_wx,_wy,_tower)) return false;
+    if(!instance_exists(_tower) || !_tower.relocating || obj_game.paused || _tower.stun_left>0 || !placement_is_valid(_wx,_wy,_tower)) return false;
     var distance=point_distance(_tower.world_x,_tower.world_y,_wx,_wy);
     if(distance<0.01 || _tower.move_speed<=0) return false;
     // MVE SPD is average world tiles per second, including the eased dash.
@@ -490,6 +530,7 @@ function tower_take_damage(_tower,_amount) {
     if(!instance_exists(_tower) || obj_game.paused || _amount<=0) return false;
     var absorbed=min(_tower.shield_hp,_amount);
     _tower.shield_hp-=absorbed;
+    if(absorbed>0) triage_emit(_tower.shield_hp<=0 ? "break" : "absorb",_tower.world_x,_tower.world_y,_tower);
     var minimum=0;
     for(var medic_index=0;medic_index<instance_number(obj_tower);++medic_index) {
         var medic=instance_find(obj_tower,medic_index);
@@ -498,9 +539,11 @@ function tower_take_damage(_tower,_amount) {
     }
     var dealt=min(max(0,_tower.hit_points-minimum),_amount-absorbed);
     _tower.hit_points=max(minimum,_tower.hit_points-dealt);
+    if(minimum>0 && _amount-absorbed>dealt) triage_emit("protect",_tower.world_x,_tower.world_y,_tower);
     _tower.hit_flash=0.3;
     combat_text(_tower,"-"+string(dealt),false);
     if(_tower.hit_points<=0) {
+        if(_tower.definition.key=="triage" && _tower.kit_left>0) triage_emit("expire",_tower.kit_x,_tower.kit_y);
         // Cancel only this tower's preview before its instance becomes invalid.
         if(instance_exists(obj_placement) && obj_placement.moving_tower==_tower) tower_cancel_move();
         if(obj_game.selected_tower==_tower) game_select_tower(noone);
@@ -562,4 +605,140 @@ function enemy_tick_laser(_enemy,_dt) {
         _enemy.laser_target=noone;
     }
     return 0;
+}
+// Deterministic, short-lived cues use the existing pause-aware impact object.
+function triage_emit(_style,_wx,_wy,_owner=noone,_radius=1) {
+    instance_create_depth(project_x(_wx,_wy),project_y(_wx,_wy),-10000,obj_impact,
+        {effect_kind:"triage",burst:false,fx_style:_style,fx_owner:_owner,fx_radius:_radius,world_x:_wx,world_y:_wy});
+}
+
+function tower_resolve_kill(_tower,_target,_dealt) {
+    if(_target.hit_points<=0) {
+        if(_target.tourniquet_heal>0) {
+            triage_emit("consume",_target.world_x,_target.world_y);
+            tower_heal(_tower,_target.tourniquet_heal,_target.world_x,_target.world_y,20);
+        }
+        _tower.kills+=1;
+        if(_tower.definition.key=="singularity") singularity_add_debris(_tower);
+        loadout_award_kill();
+        if(_tower.definition.key=="wanderer") {
+            var stacks=clamp(ceil(_dealt/_tower.definition.vigil_damage_step),1,4);
+            var full=min(stacks,max(0,_tower.definition.vigil_breakpoint-_tower.vigil_earned));
+            _tower.vigil+=stacks;
+            _tower.vigil_earned+=stacks;
+            _tower.damage+=full*_tower.definition.vigil_attack+(stacks-full)*_tower.definition.vigil_attack_reduced;
+            _tower.charge_lockout*=1-_tower.definition.kill_cooldown_reduction;
+            instance_create_depth(_tower.x,_tower.y,-10002,obj_impact,{effect_kind:"vigil",burst:false,
+                world_x:_tower.world_x,world_y:_tower.world_y,popup_stacks:stacks});
+        }
+        instance_destroy(_target);
+    }
+}
+// Stun is an explicit tower status. Refreshes retain the longer remaining duration.
+function tower_apply_stun(_tower,_duration) {
+    if(!instance_exists(_tower) || obj_game.paused || _duration<=0) return false;
+    _tower.stun_left=max(_tower.stun_left,_duration*(_tower.definition.key=="singularity" ? 1.5 : 1));
+    combat_text(_tower,"Stunned",true);
+    return true;
+}
+function singularity_add_debris(_tower) {
+    var kept=[];var oldest=-1;var life=100000;
+    if(array_length(_tower.debris)>=_tower.definition.debris_cap) {
+        for(var i=0;i<array_length(_tower.debris);++i) if(_tower.debris[i].left<life) {oldest=i;life=_tower.debris[i].left;}
+    }
+    for(var i=0;i<array_length(_tower.debris);++i) if(i!=oldest) array_push(kept,_tower.debris[i]);
+    _tower.debris_serial+=1;
+    array_push(kept,{left:_tower.definition.debris_lifetime,angle:(_tower.debris_serial*137.5) mod 360,serial:_tower.debris_serial,contacts:[]});
+    _tower.debris=kept;
+    singularity_emit("debris",_tower.world_x,_tower.world_y,0.5);
+}
+function singularity_damage(_tower,_enemy,_amount) {
+    if(!instance_exists(_enemy) || _enemy.hit_points<=0 || _enemy.spawn_left>0) return;
+    var dealt=min(_amount,_enemy.hit_points);
+    _enemy.hit_points-=dealt;_enemy.hit_flash=0.15;
+    _tower.hits_landed+=1;_tower.damage_dealt+=dealt;
+    combat_text(_enemy,string_format(dealt,1,dealt==floor(dealt) ? 0 : 1),false,_tower.hits_landed mod 3);
+    singularity_emit("hit",_enemy.world_x,_enemy.world_y,0.2);
+    tower_resolve_kill(_tower,_enemy,dealt);
+}
+function singularity_pulse(_tower) {
+    _tower.shots_fired+=1;_tower.pulse_left=0;_tower.pulse_fx=_tower.definition.pulse_recovery;_tower.recoil=16;
+    _tower.cooldown=_tower.attack_interval;
+    singularity_emit("pulse",_tower.world_x,_tower.world_y,_tower.attack_range);
+    // Reverse traversal remains valid when several enemies die to the same pulse.
+    for(var i=instance_number(obj_enemy)-1;i>=0;--i) {
+        var enemy=instance_find(obj_enemy,i);
+        if(point_distance(_tower.world_x,_tower.world_y,enemy.world_x,enemy.world_y)<=_tower.attack_range)
+            singularity_damage(_tower,enemy,_tower.damage);
+    }
+}
+function singularity_tick_attack(_tower,_dt) {
+    var d=_tower.definition;
+    _tower.pulse_fx=max(0,_tower.pulse_fx-_dt);
+    _tower.skill_release=max(0,_tower.skill_release-_dt);
+    var charging=_tower.charge_mode==TowerChargeState.Charging;
+    _tower.charge_pose=lerp(_tower.charge_pose,charging ? 1 : 0,1-exp(-5*_dt));
+    var windup=_tower.pulse_left>0 ? 1-_tower.pulse_left/d.pulse_windup : 0;
+    _tower.aim_blend=lerp(_tower.aim_blend,windup,1-exp(-8*_dt));
+    if(charging) {
+        _tower.charge_left=max(0,_tower.charge_left-_dt);
+        if(_tower.charge_left<=0.000001) {
+            _tower.skill_release=0.8;
+            _tower.density+=_tower.pending_density;_tower.pending_density=0;
+            _tower.charge_left=0;_tower.charge_mode=TowerChargeState.Ready;_tower.charge_lockout=_tower.charge_reuse_delay;
+            singularity_emit("horizon",_tower.world_x,_tower.world_y,_tower.attack_range);
+        }
+        return;
+    }
+    if(_tower.pulse_left>0) {
+        _tower.pulse_left=max(0,_tower.pulse_left-_dt);
+        if(_tower.pulse_left<=0.000001) singularity_pulse(_tower);
+        return;
+    }
+    if(_tower.cooldown>0) {
+        var downtime=min(_dt,_tower.cooldown);_tower.cooldown=max(0,_tower.cooldown-downtime);_dt-=downtime;
+        if(_dt<=0.000001) return;
+    }
+    if(_tower.skill_release>0 || _tower.settle>0 || !instance_exists(tower_find_target(_tower))) return;
+    if(_tower.density>0) {_tower.density-=1;singularity_pulse(_tower);}
+    else _tower.pulse_left=d.pulse_windup;
+}
+function singularity_segment_distance(_px,_py,_ax,_ay,_bx,_by) {
+    var dx=_bx-_ax;var dy=_by-_ay;
+    var t=clamp(((_px-_ax)*dx+(_py-_ay)*dy)/max(0.000001,dx*dx+dy*dy),0,1);
+    return point_distance(_px,_py,_ax+dx*t,_ay+dy*t);
+}
+function singularity_tick_orbit(_tower,_dt) {
+    var d=_tower.definition;var active=_tower.debris;var hits=[];
+    _tower.debris=[];_tower.orbit_clock+=_dt;
+    for(var i=0;i<array_length(active);++i) {
+        var piece=active[i];var duration=min(_dt,piece.left);var previous=piece.angle;
+        piece.angle=(piece.angle+d.debris_speed*duration) mod 360;
+        piece.left=max(0,piece.left-_dt);
+        var ax=_tower.orbit_x+dcos(previous)*d.debris_radius;var ay=_tower.orbit_y+dsin(previous)*d.debris_radius;
+        var bx=_tower.world_x+dcos(piece.angle)*d.debris_radius;var by=_tower.world_y+dsin(piece.angle)*d.debris_radius;
+        var contacts=[];
+        for(var c=0;c<array_length(piece.contacts);++c) {
+            var contact=piece.contacts[c];
+            if(instance_exists(contact.enemy) && contact.ready_at>_tower.orbit_clock+0.000001) array_push(contacts,contact);
+        }
+        for(var j=0;j<instance_number(obj_enemy);++j) {
+            var enemy=instance_find(obj_enemy,j);
+            if(enemy.spawn_left>0 || enemy.hit_points<=0 || singularity_segment_distance(enemy.world_x,enemy.world_y,ax,ay,bx,by)>d.debris_hit_radius) continue;
+            var ready=true;
+            for(var c=0;c<array_length(contacts);++c) if(contacts[c].enemy==enemy) ready=false;
+            if(ready && duration>0) {
+                array_push(hits,enemy);array_push(contacts,{enemy:enemy,ready_at:_tower.orbit_clock+d.debris_tick});
+            }
+        }
+        piece.contacts=contacts;
+        if(piece.left>0.000001) array_push(_tower.debris,piece);
+    }
+    _tower.orbit_x=_tower.world_x;_tower.orbit_y=_tower.world_y;
+    // Resolve after rebuilding survivors so kills can safely create new fragments.
+    for(var i=0;i<array_length(hits);++i) singularity_damage(_tower,hits[i],_tower.damage*d.debris_multiplier);
+}
+function singularity_emit(_style,_wx,_wy,_radius) {
+    instance_create_depth(project_x(_wx,_wy),project_y(_wx,_wy),-10000,obj_impact,
+        {effect_kind:"singularity",burst:false,fx_style:_style,fx_radius:_radius,world_x:_wx,world_y:_wy});
 }

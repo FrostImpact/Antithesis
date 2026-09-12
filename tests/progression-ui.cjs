@@ -42,10 +42,10 @@ h.obj_game.paused=true;tick();assert.equal(s.reward_time,0);h.obj_game.paused=fa
 api.tick(.9);assert.equal(api.rewardActive(),false);
 assert.deepEqual(s.cards,before.map((v,i)=>v+(i===choices[1]?1:0)));tick(30);
 assert.equal(s.cards.reduce((a,v,i)=>a+v-before[i],0),1,'Claim animation cannot award twice');
-// Shared HP ramp reaches lime, amber and red smoothly.
+// Shared HP ramp reaches muted green, amber and red smoothly.
 const source=fs.readFileSync('scripts/scr_interface/scr_interface.gml','utf8').replace(/\bmod\b/g,'%');
 h.merge_colour=(a,b,t)=>a.map((v,i)=>v+(b[i]-v)*t);
 const colour=new Function('h',`with(h){${source};return ui_health_colour;}`)(h);
-assert.deepEqual(colour(1),[186,235,83]);assert.deepEqual(colour(.5),[235,189,78]);assert.deepEqual(colour(0),[236,82,78]);
+assert.deepEqual(colour(1),[145,199,108]);assert.deepEqual(colour(.5),[235,189,78]);assert.deepEqual(colour(0),[236,82,78]);
 for(let i=1;i<=100;i++)assert.ok(colour(i/100).every((v,k)=>Math.abs(v-colour((i-1)/100)[k])<3));
 console.log('PASS: compact tray, minimize/peek/pin, hidden hit areas, animated Bits/spending/pause, notice transitions, unique reward choice/claim and HP gradient.');

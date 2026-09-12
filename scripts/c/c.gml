@@ -4,10 +4,11 @@ function loadout_initialize() {
         {title:"WANDERER",kind:"TOWER",tower:"wanderer",copy:"Adds one Wanderer copy to your loadout. Place it for 120 Bits.",accent:make_colour_rgb(187,244,72)},
         {title:"BIT CACHE",kind:"ITEM",tower:"",copy:"Gain 150 Bits. Spend Bits to deploy towers from your loadout.",accent:make_colour_rgb(236,202,121)},
         {title:"BOUNTY PROTOCOL",kind:"GAMEPLAY",tower:"",copy:"Each kill grants +2 Bits for the rest of the run. Repeat uses stack.",accent:make_colour_rgb(195,163,236)},
-        {title:"TRIAGE",kind:"TOWER",tower:"triage",copy:"Prepare TRIAGE, Support / Medic. Deploy for 100 Bits.",accent:make_colour_rgb(113,207,212)}
+        {title:"TRIAGE",kind:"TOWER",tower:"triage",copy:"Prepare TRIAGE, Support / Medic. Deploy for 100 Bits.",accent:make_colour_rgb(246,143,191)},
+        {title:"SINGULARITY",kind:"TOWER",tower:"singularity",copy:"Prepare SINGULARITY, AoE / Area Denial. Deploy for 140 Bits.",accent:make_colour_rgb(184,132,247)}
     ];
-    obj_game.loadout={bits:200,keys:["","","","",""],copies:[0,0,0,0,0],cards:[2,1,1,0,1],
-        selected:-1,hover:-1,fan_hover:[0,0,0,0,0],pending:-1,use_elapsed:0,use_duration:0.85,
+    obj_game.loadout={bits:200,keys:["","","","",""],copies:[0,0,0,0,0],cards:[2,1,1,0,1,1],
+        selected:-1,hover:-1,fan_hover:[0,0,0,0,0,0],pending:-1,use_elapsed:0,use_duration:0.85,
         deck:[],deck_cursor:0,last_reward_round:0,kill_bonus:0,
         notice:"",notice_left:0,notice_age:0,notice_next:"",
         bits_display:200,bits_gain:0,bits_gain_left:0,bits_wait:0,bits_fraction:0,
@@ -39,7 +40,7 @@ function loadout_find_slot(_key) {
     return -1;
 }
 function loadout_refill_deck() {
-    var cards=[0,0,0,1,1,1,2,2,3,4,4,4];
+    var cards=[0,0,0,1,1,1,2,2,3,4,4,4,5,5,5];
     for(var i=array_length(cards)-1;i>0;--i) {
         var j=irandom(i); var swap=cards[i]; cards[i]=cards[j]; cards[j]=swap;
     }

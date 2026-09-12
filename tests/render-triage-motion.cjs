@@ -1,0 +1,12 @@
+const fs=require('fs');
+const source=['scr_defender','scr_effects'].map(n=>fs.readFileSync(`scripts/${n}/${n}.gml`,'utf8')).join('\n').replace(/\bmod\b/g,'%');
+const host=fs.readFileSync('tests/triage-preview-host.cjs','utf8');
+fs.writeFileSync('docs/triage-motion.html',`<!doctype html><meta charset="utf-8"><title>TRIAGE motion study</title><style>body{margin:0;background:#100d14;color:#ffe3ef;font:16px system-ui}main{max-width:1100px;margin:auto;padding:24px}h1{font-size:24px}p{color:#c29aad}canvas{width:100%;border:1px solid #5f3d53}button,input{accent-color:#f48abe}button{background:#f48abe;border:0;padding:10px 24px;color:#271220;cursor:pointer}label{margin-left:20px}</style><main><h1>TRIAGE / Pink field medic</h1><p>Darts, Tourniquet, Sanctuary, shield and Rapid Response. Uses the game's model and effect functions.</p><canvas id="view" width="1100" height="650"></canvas><p><button id="pause">Pause</button><label>View <input id="angle" type="range" min="0" max="360" value="320"></label><label>Scale <input id="zoom" type="range" min="1" max="5" step="0.1" value="4"></label></p><input aria-label="Animation time" id="scrub" type="range" min="0" max="14" value="0" step=".01" style="width:100%"></main><script>${host}\nconst preview=createTriagePreview(document.getElementById('view').getContext('2d'),${JSON.stringify(source)});let clock=0,last=0,paused=false;const scrub=document.getElementById('scrub');document.getElementById('pause').onclick=()=>{paused=!paused;document.getElementById('pause').textContent=paused?'Play':'Pause';};scrub.oninput=()=>clock=+scrub.value;function frame(now){if(!paused)clock+=Math.min(.05,(now-last)/1000||0);last=now;preview.frame(clock,+document.getElementById('angle').value,+document.getElementById('zoom').value);scrub.value=clock%14;requestAnimationFrame(frame);}requestAnimationFrame(frame);</script>`);
+if(process.argv.includes('--render')){
+ const {createCanvas}=require('@napi-rs/canvas');const {createTriagePreview}=require('./triage-preview-host.cjs');
+ const c=createCanvas(1100,650),preview=createTriagePreview(c.getContext('2d'),source);
+ const sheet=createCanvas(1100,975),ctx=sheet.getContext('2d');
+ [2.06,5.8,6.85,8.2,10.4,11.3].forEach((t,i)=>{preview.frame(t);ctx.drawImage(c,(i%2)*550,Math.floor(i/2)*325,550,325);});
+ fs.writeFileSync('docs/triage-effects.png',sheet.toBuffer('image/png'));
+}
+console.log('Rendered TRIAGE interactive motion study.');

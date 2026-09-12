@@ -7,7 +7,7 @@ function createHost(){
   dcos:a=>Math.cos(a*Math.PI/180),dsin:a=>Math.sin(a*Math.PI/180),clamp:(v,a,b)=>Math.max(a,Math.min(b,v)),
   lerp:(a,b,t)=>a+(b-a)*t,array_length:a=>a.length,array_push:(a,v)=>a.push(v),irandom:n=>Math.floor(n*.37),string:String,
   make_colour_rgb:(...v)=>v,string_width:s=>s.length*7,GlossaryTerm:{None:-1,GreatPowers:0,Charge:1,Lock:2},TowerAbility:{DoubleTap:0,ShockBolts:1,Overloaded:2},
-  draw_triage:()=>{},triage_muzzle:()=>{},draw_defender:()=>{},defender_muzzle:()=>{},draw_wanderer:()=>{},wanderer_muzzle:()=>{},
+  draw_singularity:()=>{},singularity_muzzle:()=>{},draw_triage:()=>{},triage_muzzle:()=>{},draw_defender:()=>{},defender_muzzle:()=>{},draw_wanderer:()=>{},wanderer_muzzle:()=>{},
   variable_struct_exists:(o,k)=>k in o,variable_struct_get:(o,k)=>o[k],
   mouseX:1100,mouseY:150,pressed:false,mb_left:0,
   device_mouse_x_to_gui:()=>h.mouseX,device_mouse_y_to_gui:()=>h.mouseY,mouse_check_button_pressed:()=>h.pressed,
@@ -25,7 +25,7 @@ function createHost(){
 }
 function test(){
  const {h,api,towers}=createHost();const s=h.obj_game.loadout;
- assert.deepEqual(s.cards,[2,1,1,0,1]);assert.ok(s.keys.every(k=>k===''));
+ assert.deepEqual(s.cards,[2,1,1,0,1,1]);assert.ok(s.keys.every(k=>k===''));
  assert.equal(api.select(0),false,'Starter cards are stored, not automatically usable towers');
  assert.equal(api.use(0),true);assert.equal(api.use(0),false,'Double click cannot spend twice');
  assert.equal(s.cards[0],1);assert.equal(s.copies[0],0);

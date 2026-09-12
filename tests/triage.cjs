@@ -1,9 +1,9 @@
 const fs=require('fs'),assert=require('node:assert/strict');
-const h={obj_game:{paused:false},obj_tower:'tower',obj_enemy:'enemy',obj_impact:'impact',obj_placement:null,obj_input:{hovered_tower:null},noone:null,
- TowerChargeState:{Ready:0,Charging:1},towers:[],enemies:[],min:Math.min,max:Math.max,string:String,string_format:(n,w,d)=>n.toFixed(d),
+const h={obj_game:{paused:false},obj_tower:'tower',obj_enemy:'enemy',obj_impact:'impact',obj_placement:null,obj_input:{hovered_tower:null},noone:null,project_x:x=>x,project_y:(x,y)=>y,
+ TowerChargeState:{Ready:0,Charging:1},towers:[],enemies:[],effects:[],min:Math.min,max:Math.max,string:String,string_format:(n,w,d)=>n.toFixed(d),
  array_length:a=>a.length,array_push:(a,v)=>a.push(v),point_distance:(x,y,a,b)=>Math.hypot(x-a,y-b),
  instance_exists:o=>!!o&&!o.destroyed,instance_number:o=>(o==='tower'?h.towers:h.enemies).length,
- instance_find:(o,i)=>(o==='tower'?h.towers:h.enemies)[i],instance_destroy:o=>o.destroyed=true,instance_create_depth:()=>{},
+ instance_find:(o,i)=>(o==='tower'?h.towers:h.enemies)[i],instance_destroy:o=>o.destroyed=true,instance_create_depth:(x,y,d,o,data)=>h.effects.push(data),
  game_select_tower:()=>{},loadout_notice:()=>{}};
 const src=fs.readFileSync('scripts/scr_combat/scr_combat.gml','utf8').replace(/\bmod\b/g,'%');
 const a=new Function('h',`with(h){${src};return {damage:tower_take_damage,finish:triage_resuscitate,tick:triage_tick_support,heal:tower_heal};}`)(h);
@@ -32,3 +32,11 @@ assert.equal(loadout.api.select(0),true);
 const deployed=loadout.api.place(2,2);
 assert.equal(deployed.definition.key,'triage');assert.equal(loadout.h.obj_game.loadout.bits,100);
 console.log('PASS: TRIAGE starter card redemption, tray selection and 100-Bit deployment.');
+
+for(const style of ['release','consume','shield','absorb','heal','protect','expire'])assert.ok(h.effects.some(f=>f.fx_style===style),style+' effect is emitted by combat');
+h.obj_game.paused=false;ally.shield_hp=1;ally.hit_points=100;a.damage(ally,2);assert.ok(h.effects.some(f=>f.fx_style==='break'));
+
+const kitArc=h.effects.find(f=>f.effect_kind==='heal_arc'&&f.fx_owner===ally);
+assert.ok(kitArc);assert.equal(kitArc.world_x,medic.kit_x);assert.equal(kitArc.world_y,medic.kit_y);
+ally.hit_points=ally.max_hit_points;const before=h.effects.length;a.heal(ally,20,5,6);assert.equal(h.effects.length,before,'Full health emits no healing arc');
+console.log('PASS: med-kit healing captures source and recipient; full health emits no arc.');

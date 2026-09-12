@@ -4,7 +4,8 @@ elapsed+=dt;
 hit_flash=max(0,hit_flash-dt);
 lock_visual=lerp(lock_visual,lock_left>0 ? 1 : 0,1-exp(-(lock_left>0 ? 18 : 9)*dt));
 // Hold the old health briefly on contact, then ease the damage segment away.
-if(hit_flash<=0) display_hit_points=lerp(display_hit_points,hit_points,1-exp(-9*dt));
+if(display_hit_points<hit_points) display_hit_points=hit_points;
+else if(hit_flash<=0) display_hit_points=lerp(display_hit_points,hit_points,1-exp(-9*dt));
 var route=obj_world.route;
 // Finish materializing at the entrance before joining the route or taking hits.
 var active_dt=max(0,dt-spawn_left);

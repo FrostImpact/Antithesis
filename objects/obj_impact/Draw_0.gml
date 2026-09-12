@@ -1,3 +1,6 @@
+if(effect_kind=="singularity") { singularity_draw_event(id); exit; }
+if(effect_kind=="heal_arc") { draw_heal_arc(id); exit; }
+if(effect_kind=="triage") { triage_draw_event(id); exit; }
 if(effect_kind=="vigil") {
     var t=clamp(age/lifetime,0,1);
     var z=obj_camera.zoom;

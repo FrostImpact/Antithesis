@@ -91,6 +91,25 @@ function build_tower_catalog() {
                 [ui_segment("On arrival, leave a med kit at the previous location for 12s. Only one kit per TRIAGE.")],
                 [ui_segment("Each tower within 1.5 tiles heals once per kit for 120% of TRIAGE's ATK, including towers entering later.")]]}
         ],draw_model:draw_triage,muzzle:triage_muzzle
+    },singularity:{key:"singularity",name:"SINGULARITY",role:"AoE / Area Denial",description:"The weight of the world, weaponized",
+        damage:24,bit_cost:140,max_hit_points:150,move_speed:5,attack_range:2.5,attack_interval:1.1,
+        pulse_windup:1.6,summon_duration:1.6,pulse_recovery:0.7,charge_duration:2,charge_reuse_delay:8,burst_interval:0.1,
+        hits_per_attack:1,shot_interval:0.1,hit_multiplier:1,
+        debris_cap:6,debris_lifetime:5,debris_radius:1.65,debris_speed:110,debris_hit_radius:0.35,debris_tick:0.2,debris_multiplier:0.06,
+        role_copy:[[ui_segment("“The weight of the world, weaponized”")]],
+        abilities:[
+            {id:0,label:"GRAVITY WELL",kind:"PASSIVE",title:"Gravity Well",paragraphs:[
+                [ui_segment("Raise a black hole for 1.6s, then slam it down and pulse outward for 100% ATK to all enemies within range.")],
+                [ui_segment("ATK SPD only reduces the downtime between attacks. It never shortens the windup.")]]},
+            {id:1,label:"ORBITAL DECAY",kind:"PASSIVE",title:"Orbital Decay",paragraphs:[
+                [ui_segment("Kills create orbiting Debris, up to 6 pieces. Each lasts 5s; new kills at the cap replace the oldest.")],
+                [ui_segment("Each fragment deals 6% ATK every 0.2s to enemies within 0.35 tiles of its path, orbiting 1.65 tiles from the tower.")]]},
+            {id:2,label:"INSTABILITY",kind:"PASSIVE",title:"Instability",paragraphs:[
+                [ui_segment("Stuns last 50% longer on SINGULARITY. Stuns suspend attacks, skill charging and movement; existing Debris keeps orbiting.")]]},
+            {id:3,label:"EVENT HORIZON",kind:"CHARGE SKILL",title:"Event Horizon",paragraphs:[
+                [ui_segment("Consume Debris when charging starts. After 2s, gain one Density per consumed fragment. Cooldown: 8s.")],
+                [ui_segment("Each Basic Attack consumes 1 Density to skip its windup. Attack downtime still applies. Density persists until spent.")]]}
+        ],draw_model:draw_singularity,muzzle:singularity_muzzle
     }};
 }
 function tower_definition(_key) {

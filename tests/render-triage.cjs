@@ -13,7 +13,7 @@ const draw=new Function('s',`with(s){${source};return draw_triage;}`)(host);
 draw(180,455,320,0,0,0,0,0,7);
 draw(580,455,320,1,0,1,1,0,7);
 draw(990,455,140,2,0,0,0,0,7);
-const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="560" viewBox="0 0 1240 560"><rect width="1240" height="560" fill="#13171c"/><g stroke-linejoin="round">${polygons.map(p=>`<polygon fill="rgb(${p.colour})" points="${p.points.map(v=>v.join(',')).join(' ')}"/>`).join('')}</g><g fill="#e8e0d6" font-family="sans-serif"><text x="32" y="38" font-size="23">TRIAGE / REFERENCE MODEL STUDY</text><text x="100" y="510">REST</text><text x="520" y="510">SANCTUARY</text><text x="920" y="510">REAR</text><text x="32" y="544" font-size="12" fill="#8c9aa8">Production geometry · ivory hood / cyan lens / medical cross / field backpack</text></g></svg>`;
+const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="560" viewBox="0 0 1240 560"><rect width="1240" height="560" fill="#13171c"/><g stroke-linejoin="round">${polygons.map(p=>`<polygon fill="rgb(${p.colour})" points="${p.points.map(v=>v.join(',')).join(' ')}"/>`).join('')}</g><g fill="#e8e0d6" font-family="sans-serif"><text x="32" y="38" font-size="23">TRIAGE / REFERENCE MODEL STUDY</text><text x="100" y="510">REST</text><text x="520" y="510">SANCTUARY</text><text x="920" y="510">REAR</text><text x="32" y="544" font-size="12" fill="#8c9aa8">Production geometry · rose cloth / articulated applicator / medical vials / folded hood</text></g></svg>`;
 fs.writeFileSync(path.join(root,'docs/triage-design.svg'),svg);
 if(process.argv.includes('--polygons')) fs.writeFileSync(path.join(root,'docs/triage-preview-polygons.json'),JSON.stringify(polygons));
 console.log('Rendered docs/triage-design.svg from production GML.');

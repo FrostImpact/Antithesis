@@ -4,13 +4,13 @@ function ui_panel_y() {
     return obj_ui.panel_top+(1-clamp(obj_ui.panel_open,0,1))*16;
 }
 
-// One continuous lime / amber / red ramp for every health display.
+// One continuous muted green / amber / red ramp for every health display.
 function ui_health_colour(_ratio) {
     var ratio=clamp(_ratio,0,1);
     var red=make_colour_rgb(236,82,78);
     var amber=make_colour_rgb(235,189,78);
-    var lime=make_colour_rgb(186,235,83);
-    return ratio<0.5 ? merge_colour(red,amber,ratio*2) : merge_colour(amber,lime,(ratio-0.5)*2);
+    var green=make_colour_rgb(145,199,108);
+    return ratio<0.5 ? merge_colour(red,amber,ratio*2) : merge_colour(amber,green,(ratio-0.5)*2);
 }
 
 function ui_control_rect(_control) {
@@ -47,6 +47,7 @@ function ui_pointer_blocked() {
     var my=pointer_y-ui_panel_y();
     if(point_in_rectangle(mx,my,0,0,360,198)) return true;
     if(obj_game.selected_tower.definition.key=="wanderer" && point_in_rectangle(mx,my,0,-54,44,-10)) return true;
+    if(obj_game.selected_tower.definition.key=="singularity" && (point_in_rectangle(mx,my,0,-54,44,-10) || point_in_rectangle(mx,my,54,-54,98,-10))) return true;
     for(var action=UiAction.Target;action<=UiAction.AbilityDoubleTap+array_length(obj_game.selected_tower.definition.abilities)-1;++action) {
         if(ui_point_in_local_rect(mx,my,ui_control_rect(action))) return true;
     }
@@ -170,6 +171,7 @@ function ui_stat_breakdown(_tower,_stat) {
         if(d.key=="vestral") body+="\nDouble Tap: 2 hits x 50% = "+string(_tower.damage*0.5)+" per hit.";
         return {title:"ATTACK DAMAGE",body:body};
     }
+    if(_stat==1 && d.key=="singularity") return {title:"PULSE TIMING",body:"Fixed windup: "+string(d.pulse_windup)+"s\nCurrent downtime: "+string_format(_tower.attack_interval,1,2)+"s\nFull cycle: "+string_format(d.pulse_windup+_tower.attack_interval,1,2)+"s\nATK SPD affects downtime only.\nDensity skips the windup, not the downtime."};
     if(_stat==1) return {title:"ATTACK RATE",body:"Base: "+string_format(1/d.attack_interval,1,2)+" attacks/s\nSpeed adjustment: "+string_format((d.attack_interval/_tower.attack_interval-1)*100,1,1)+"%\nTotal: 1 / "+string_format(_tower.attack_interval,1,2)+"s = "+string_format(1/_tower.attack_interval,1,2)+" attacks/s"+(d.key=="wanderer" ? "\nVigil disables automatic attacks. Skills fire once." : (d.key=="triage" ? "\nOne dart per attack." : "\nDowntime starts after the second hit."))};
     if(_stat==2) return {title:"ATTACK RANGE",body:"Base: "+string(d.attack_range)+"\nAdjustments: "+string(_tower.attack_range-d.attack_range)+"\nTotal: "+string(_tower.attack_range)+(d.key=="wanderer" ? "\nExecution ignores range." : "")};
     if(_stat==4) return {title:"MOVEMENT SPEED",body:"Base: "+string(d.move_speed)+" tiles/s\nAdjustments: "+string(_tower.move_speed-d.move_speed)+" tiles/s\nTotal: "+string(_tower.move_speed)+" tiles/s\nTravel time = distance / MVE SPD.\nAverage speed across the eased dash.\nCombat timers pause until arrival."};
@@ -198,6 +200,7 @@ function ui_handle_input() {
         return;
     }
     if(action==UiAction.Target) {
+        if(tower.definition.key=="singularity") return;
         tower.target_mode=(tower.target_mode+1) mod TowerTargetMode.Count;
         tower.select_pulse=0.5;
     }

@@ -11,7 +11,7 @@ const TowerAbility={DoubleTap:0,ShockBolts:1,Overloaded:2,Count:3};
 const TowerTargetMode={First:0,Strongest:1,Nearest:2,Count:3};
 const TowerChargeState={Ready:0,Charging:1,Burst:2,Recovery:3};
 const UiAction={None:-1,Target:0,Charge:1,Move:2,AbilityDoubleTap:3,AbilityShockBolts:4,AbilityOverloaded:5,AbilityMove:6,Spawn:7,Count:8};
-const definitions = new Function('draw_defender', 'defender_muzzle', 'draw_wanderer', 'wanderer_muzzle', 'GlossaryTerm', 'TowerAbility', `function draw_triage(){} function triage_muzzle(){} ${translate(read('scripts/scr_definitions/scr_definitions.gml'))}; return build_tower_catalog();`)(() => {}, () => {}, () => {}, () => {}, GlossaryTerm, TowerAbility);
+const definitions = new Function('draw_defender', 'defender_muzzle', 'draw_wanderer', 'wanderer_muzzle', 'GlossaryTerm', 'TowerAbility', `function draw_singularity(){} function singularity_muzzle(){} function draw_triage(){} function triage_muzzle(){} ${translate(read('scripts/scr_definitions/scr_definitions.gml'))}; return build_tower_catalog();`)(() => {}, () => {}, () => {}, () => {}, GlossaryTerm, TowerAbility);
 const code = translate(read('scripts/scr_combat/scr_combat.gml'));
 const shared = { paused: false };
 function makeTower(enemies, definition = definitions.vestral) {
@@ -658,4 +658,43 @@ console.log('PASS: text effects create no particles, pause with gameplay, and dr
  assert.equal(s.move_active,false);assert.equal(s.kit_left,12);assert.equal(s.kit_x,0);assert.equal(s.world_x,3);
  assert.deepEqual(s.kit_healed,[]);
  console.log('PASS: TRIAGE charge pause/completion, no charge attacks, cooldown and med-kit creation at departure point on arrival.');
+}
+{
+ const e=enemy(1000);e.tourniquet_heal=0;
+ const {s,api}=makeTower([e],definitions.triage);const emitted=[];
+ s.instance_create_depth=(x,y,d,o,data)=>emitted.push(data);
+ api.fireHit(s,e);api.fireHit(s,e);api.fireHit(s,e);
+ assert.equal(emitted.filter(f=>f.fx_style==='dart').length,3);
+ assert.equal(emitted.filter(f=>f.fx_style==='mark').length,1);
+ assert.ok(!emitted.some(f=>f.effect_kind==='hit'||f.effect_kind==='kill'),'TRIAGE uses its own impact palette');
+ e.hit_points=1;s.hit_points=40;api.fireHit(s,e);
+ for(const style of ['kill','consume','heal'])assert.ok(emitted.some(f=>f.fx_style===style));
+ const arc=emitted.find(f=>f.effect_kind==='heal_arc');assert.ok(arc);
+ assert.equal(arc.world_x,e.world_x);assert.equal(arc.world_y,e.world_y);assert.equal(arc.fx_owner,s);
+ console.log('PASS: TRIAGE attacks emit pink dart/mark effects and lethal Tourniquet triggers consume + healing cues.');
+}
+
+// Damage feedback holds the previous HP, then drains independently of live HP.
+{
+ const feedback=makeTower([]);const t=feedback.s;const previous=t.hit_points;
+ t.hit_points=previous-30;t.hit_flash=.3;
+ run(feedback,12);assert.equal(t.display_hit_points,previous,'Gray trail holds after impact');
+ run(feedback,36);assert.ok(t.display_hit_points<previous&&t.display_hit_points>t.hit_points,'Gray trail catches up after the delay');
+ t.obj_game.paused=true;const held=t.display_hit_points;run(feedback,24);assert.equal(t.display_hit_points,held);
+ t.obj_game.paused=false;t.hit_points=previous;feedback.api.tick();assert.equal(t.display_hit_points,previous,'Healing clears the stale damage trail');
+ console.log('PASS: delayed HP trail, smooth catch-up, pause and healing recovery.');
+}
+{
+ const gravity=makeTower([],definitions.singularity);
+ uiHost.obj_game.selected_tower=gravity.s;uiHost.mx=panel.panel_left+485;uiHost.my=panel.panel_top+149;
+ assert.equal(uiApi.blocked(),true);uiApi.click();assert.equal(gravity.s.ability_tab,3);assert.equal(gravity.s.ability_detail_open,true);
+ uiApi.click();assert.equal(gravity.s.ability_detail_open,false);
+ assert.ok(stats(gravity.s,1).body.includes('downtime only'));
+ console.log('PASS: SINGULARITY fourth ability input and fixed-windup stat explanation.');
+}
+{
+ const gravity=makeTower([],definitions.singularity);uiHost.obj_game.selected_tower=gravity.s;
+ for(const badgeX of [22,76]) {uiHost.mx=panel.panel_left+badgeX;uiHost.my=panel.panel_top-30;assert.equal(uiApi.blocked(),true);}
+ uiHost.mx=panel.panel_left+49;assert.equal(uiApi.blocked(),false,'Space between badges stays click-through');
+ console.log('PASS: Debris/Density badges own their visible hit regions without blocking the gap.');
 }
